@@ -1,0 +1,110 @@
+[
+  {
+    "sha": "a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2",
+    "short_sha": "a3b4c5d6",
+    "repo": "company/payment-svc",
+    "author_team": "platform-engineering",
+    "timestamp": "2021-11-28T14:32:00Z",
+    "message": "chore: upgrade log4j-core 2.13.3 → 2.14.1 for performance improvements",
+    "body": "Upgrades log4j-core and log4j-api from 2.13.3 to 2.14.1.\nRelease notes cite async logging throughput improvements (20% faster).\nNo security advisory was available at time of merge.",
+    "files_changed": [
+      "pom.xml",
+      "payment-service/pom.xml",
+      "payment-worker/pom.xml"
+    ],
+    "diff_summary": {
+      "pom.xml": "-    <log4j.version>2.13.3</log4j.version>\n+    <log4j.version>2.14.1</log4j.version>",
+      "payment-service/pom.xml": "No direct version override — inherits from parent pom.xml",
+      "payment-worker/pom.xml": "No direct version override — inherits from parent pom.xml"
+    },
+    "pr_number": "PR-2847",
+    "pr_title": "chore: Bump log4j to 2.14.1",
+    "pr_merged_by_team": "platform-engineering",
+    "approvers": 2,
+    "ci_status": "passed"
+  },
+  {
+    "sha": "b9c8d7e6f5a4b3c2d1e0f9a8b7c6d5e4f3a2b1c0",
+    "short_sha": "b9c8d7e6",
+    "repo": "company/payment-svc",
+    "author_team": "payments-team",
+    "timestamp": "2021-12-01T09:15:00Z",
+    "message": "feat: add structured logging for payment events using MDC context",
+    "body": "Adds Mapped Diagnostic Context (MDC) to payment controller for trace correlation.\nLogs user-supplied data (transaction ID, merchant name) into MDC fields.\nNote: this change causes user-controlled data to be passed through log4j formatters.",
+    "files_changed": [
+      "payment-service/src/main/java/com/company/payment/PaymentController.java",
+      "payment-service/src/main/java/com/company/payment/logging/MDCFilter.java"
+    ],
+    "diff_summary": {
+      "PaymentController.java": "+MDC.put(\"userAgent\", request.getHeader(\"User-Agent\"));\n+log.info(\"Processing payment request from agent: {}\", request.getHeader(\"User-Agent\"));",
+      "MDCFilter.java": "+filter.addMDCField(\"X-Forwarded-For\");\n+filter.addMDCField(\"User-Agent\");"
+    },
+    "pr_number": "PR-2891",
+    "pr_title": "feat: Enhanced payment logging with MDC",
+    "pr_merged_by_team": "payments-team",
+    "approvers": 2,
+    "ci_status": "passed"
+  },
+  {
+    "sha": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0",
+    "short_sha": "c1d2e3f4",
+    "repo": "company/payment-svc",
+    "author_team": "devops",
+    "timestamp": "2021-12-05T11:00:00Z",
+    "message": "ci: add integration tests for payment controller endpoints",
+    "body": "Adds integration tests covering the main payment flow.\nAll tests pass locally and in CI.",
+    "files_changed": [
+      "payment-service/src/test/java/com/company/payment/PaymentControllerIntegrationTest.java"
+    ],
+    "diff_summary": {
+      "PaymentControllerIntegrationTest.java": "+@Test void testProcessPayment_success() {...}\n+@Test void testProcessPayment_invalidCard() {...}"
+    },
+    "pr_number": "PR-2912",
+    "pr_title": "ci: Payment controller integration tests",
+    "pr_merged_by_team": "devops",
+    "approvers": 1,
+    "ci_status": "passed"
+  },
+  {
+    "sha": "d4e5f6a7b8c9d0e1f2a3b4c5d6e7f8a9b0c1d2e3",
+    "short_sha": "d4e5f6a7",
+    "repo": "company/payment-svc",
+    "author_team": "payments-team",
+    "timestamp": "2021-12-08T16:45:00Z",
+    "message": "fix: handle null merchant name in payment request gracefully",
+    "body": "Prevents NullPointerException when merchant_name field is missing from request body.",
+    "files_changed": [
+      "payment-service/src/main/java/com/company/payment/PaymentController.java"
+    ],
+    "diff_summary": {
+      "PaymentController.java": "+String merchant = Optional.ofNullable(request.getMerchantName()).orElse(\"unknown\");"
+    },
+    "pr_number": "PR-2933",
+    "pr_title": "fix: null merchant name NPE",
+    "pr_merged_by_team": "payments-team",
+    "approvers": 1,
+    "ci_status": "passed"
+  },
+  {
+    "sha": "e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6",
+    "short_sha": "e7f8a9b0",
+    "repo": "company/payment-svc",
+    "author_team": "platform-engineering",
+    "timestamp": "2021-12-10T08:30:00Z",
+    "message": "hotfix: set log4j2.formatMsgNoLookups=true to mitigate CVE-2021-44228",
+    "body": "Emergency mitigation for Log4Shell (CVE-2021-44228).\nSets -Dlog4j2.formatMsgNoLookups=true in JVM startup args.\nFull remediation (upgrade to 2.15.0) tracked in PAY-442.",
+    "files_changed": [
+      "deployment/k8s/payment-svc-deployment.yaml",
+      "scripts/start.sh"
+    ],
+    "diff_summary": {
+      "payment-svc-deployment.yaml": "+        - name: JAVA_OPTS\n+          value: \"-Dlog4j2.formatMsgNoLookups=true\"",
+      "start.sh": "+JAVA_OPTS=\"$JAVA_OPTS -Dlog4j2.formatMsgNoLookups=true\""
+    },
+    "pr_number": "PR-2940",
+    "pr_title": "hotfix: Log4Shell CVE-2021-44228 mitigation",
+    "pr_merged_by_team": "platform-engineering",
+    "approvers": 2,
+    "ci_status": "passed"
+  }
+]

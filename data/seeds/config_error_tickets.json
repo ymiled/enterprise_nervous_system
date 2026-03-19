@@ -1,0 +1,34 @@
+[
+  {
+    "ticket_id": "AUTH-101",
+    "project": "AUTH",
+    "title": "auth-svc unable to connect to Redis — all token validations failing",
+    "description": "Starting 2022-07-04 ~10:31 UTC, auth-svc is returning 503 on all token validation requests.\nLogs show: 'Unable to connect to Redis: redis-prod-eu.internal:6379 — Connection refused'.\n\nRoot cause appears to be an infrastructure config change (PR-3301) that changed REDIS_HOST to redis-prod-eu.internal. DNS for this host is not resolvable from the production k8s cluster — the EU Redis cluster migration was not fully provisioned.",
+    "status": "In Progress",
+    "priority": "Critical",
+    "component": "auth-svc",
+    "created": "2022-07-04T10:35:00Z",
+    "updated": "2022-07-04T11:00:00Z",
+    "reporter_team": "sre",
+    "assignee_team": "infrastructure",
+    "labels": ["redis", "config", "incident", "auth"],
+    "linked_tickets": ["AUTH-102"],
+    "url": "https://jira.company.com/AUTH-101"
+  },
+  {
+    "ticket_id": "AUTH-102",
+    "project": "AUTH",
+    "title": "Reschedule EU Redis migration with proper DNS pre-provisioning",
+    "description": "The 2022-07-04 EU Redis migration (PR-3301) failed because the DNS record for redis-prod-eu.internal was not propagated to the prod k8s cluster before the config change was deployed.\n\nReschedule with:\n1. DNS record created and verified resolvable from prod cluster BEFORE helm values change\n2. Staged rollout: one pod at a time with health check validation\n3. Rollback plan documented and tested\n\nNew target: 2022-07-11 during low-traffic window.",
+    "status": "Open",
+    "priority": "High",
+    "component": "auth-svc",
+    "created": "2022-07-04T11:10:00Z",
+    "updated": "2022-07-04T11:10:00Z",
+    "reporter_team": "infrastructure",
+    "assignee_team": "infrastructure",
+    "labels": ["redis", "migration", "process-improvement"],
+    "linked_tickets": ["AUTH-101"],
+    "url": "https://jira.company.com/AUTH-102"
+  }
+]

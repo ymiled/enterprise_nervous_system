@@ -16,11 +16,14 @@ build/
 *.egg
 .eggs/
 
-# Virtual environments
+# Virtual environments (uv creates .venv automatically)
 .venv/
 venv/
 env/
 ENV/
+
+# uv
+uv.lock
 
 # IDE
 .vscode/

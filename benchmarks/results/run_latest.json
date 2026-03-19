@@ -1,0 +1,16 @@
+[
+  {
+    "scenario_id": "ls-01",
+    "scenario_name": "Log4Shell \u00b7 payment-svc \u00b7 P0 \u00b7 full window",
+    "rca_accuracy": 1.0,
+    "evidence_quality": 1.0,
+    "actionability": 1.0,
+    "reliability": 1.0,
+    "pii_compliance": 1.0,
+    "citation_integrity": 1.0,
+    "overall_score": 1.0,
+    "elapsed_seconds": 509.1,
+    "postmortem_confidence": 0.95,
+    "notes": ""
+  }
+]

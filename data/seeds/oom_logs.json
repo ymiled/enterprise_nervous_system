@@ -1,0 +1,76 @@
+[
+  {
+    "id": "oom-001",
+    "timestamp": "2022-03-15T14:00:00Z",
+    "service": "order-svc",
+    "host": "order-svc-prod-01",
+    "level": "INFO",
+    "trace_id": "t-baseline-oom",
+    "logger": "com.company.order.metrics.HealthCheck",
+    "message": "Health check OK — heap usage 42%",
+    "thread": "health-check-1",
+    "env": "production"
+  },
+  {
+    "id": "oom-002",
+    "timestamp": "2022-03-15T14:30:00Z",
+    "service": "order-svc",
+    "host": "order-svc-prod-01",
+    "level": "WARN",
+    "trace_id": "t-oom-warn-01",
+    "logger": "com.company.order.cache.SessionCache",
+    "message": "Heap usage at 78% — session cache growing unbounded",
+    "thread": "cache-monitor-1",
+    "env": "production"
+  },
+  {
+    "id": "oom-003",
+    "timestamp": "2022-03-15T14:45:00Z",
+    "service": "order-svc",
+    "host": "order-svc-prod-01",
+    "level": "WARN",
+    "trace_id": "t-oom-warn-02",
+    "logger": "com.company.order.cache.SessionCache",
+    "message": "Heap usage at 91% — GC overhead limit approaching",
+    "thread": "cache-monitor-1",
+    "env": "production"
+  },
+  {
+    "id": "oom-004",
+    "timestamp": "2022-03-15T14:52:10Z",
+    "service": "order-svc",
+    "host": "order-svc-prod-01",
+    "level": "ERROR",
+    "trace_id": "t-oom-err-01",
+    "logger": "com.company.order.OrderController",
+    "message": "GC overhead limit exceeded — JVM spending >98% time in garbage collection",
+    "thread": "http-nio-8080-exec-5",
+    "stack_trace": "java.lang.OutOfMemoryError: GC overhead limit exceeded\n\tat com.company.order.cache.SessionCache.put(SessionCache.java:88)\n\tat com.company.order.OrderService.cacheUserSession(OrderService.java:142)\n\tat com.company.order.OrderController.processOrder(OrderController.java:67)",
+    "env": "production"
+  },
+  {
+    "id": "oom-005",
+    "timestamp": "2022-03-15T14:52:18Z",
+    "service": "order-svc",
+    "host": "order-svc-prod-02",
+    "level": "FATAL",
+    "trace_id": "t-oom-fatal-01",
+    "logger": "com.company.order.Application",
+    "message": "JVM crashed — OutOfMemoryError: Java heap space",
+    "thread": "main",
+    "stack_trace": "java.lang.OutOfMemoryError: Java heap space\n\tat java.util.HashMap.resize(HashMap.java:704)\n\tat com.company.order.cache.SessionCache.put(SessionCache.java:88)\n\tat com.company.order.OrderService.cacheUserSession(OrderService.java:142)",
+    "env": "production"
+  },
+  {
+    "id": "oom-006",
+    "timestamp": "2022-03-15T14:52:20Z",
+    "service": "api-gateway",
+    "host": "api-gw-prod-01",
+    "level": "ERROR",
+    "trace_id": "t-oom-gw-01",
+    "logger": "com.company.gateway.UpstreamHealthMonitor",
+    "message": "order-svc upstream unhealthy — 3 consecutive 503 responses",
+    "thread": "health-monitor-1",
+    "env": "production"
+  }
+]

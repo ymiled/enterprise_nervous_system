@@ -23,12 +23,25 @@ JIRA_URL: str = os.getenv("JIRA_URL", "https://issues.apache.org/jira")
 JIRA_TOKEN: str = os.getenv("JIRA_TOKEN", "")
 JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
 
-# Seed data paths
+# Seed data paths — overridable per-scenario via env vars (used by benchmark runner)
 SEEDS_DIR: Path = Path(__file__).parent.parent / "data" / "seeds"
-LOGS_SEED_FILE: Path = SEEDS_DIR / "log4shell_logs.json"
-COMMITS_SEED_FILE: Path = SEEDS_DIR / "log4shell_commits.json"
-TICKETS_SEED_FILE: Path = SEEDS_DIR / "log4shell_tickets.json"
+LOGS_SEED_FILE: Path = Path(os.getenv("LOGS_SEED_FILE", str(SEEDS_DIR / "log4shell_logs.json")))
+COMMITS_SEED_FILE: Path = Path(os.getenv("COMMITS_SEED_FILE", str(SEEDS_DIR / "log4shell_commits.json")))
+TICKETS_SEED_FILE: Path = Path(os.getenv("TICKETS_SEED_FILE", str(SEEDS_DIR / "log4shell_tickets.json")))
 
 DEFAULT_INCIDENT_SERVICE: str = os.getenv("DEFAULT_INCIDENT_SERVICE", "payment-svc")
 DEFAULT_INCIDENT_TIME: str = os.getenv("DEFAULT_INCIDENT_TIME", "2021-12-10T06:15:00Z")
 DEFAULT_INCIDENT_SEVERITY: str = os.getenv("DEFAULT_INCIDENT_SEVERITY", "P0")
+
+# AG2 LLM config — Anthropic Claude
+LLM_CONFIG: dict = {
+    "config_list": [
+        {
+            "model": "claude-haiku-4-5-20251001",
+            "api_key": ANTHROPIC_API_KEY,
+            "api_type": "anthropic",
+        }
+    ],
+    "temperature": 0.1,
+    "cache_seed": None,
+}

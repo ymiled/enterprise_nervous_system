@@ -1,0 +1,77 @@
+[
+  {
+    "id": "cfg-001",
+    "timestamp": "2022-07-04T09:00:00Z",
+    "service": "auth-svc",
+    "host": "auth-svc-prod-01",
+    "level": "INFO",
+    "trace_id": "t-baseline-cfg",
+    "logger": "com.company.auth.metrics.HealthCheck",
+    "message": "Health check OK — Redis connection pool healthy",
+    "thread": "health-check-1",
+    "env": "production"
+  },
+  {
+    "id": "cfg-002",
+    "timestamp": "2022-07-04T10:31:05Z",
+    "service": "auth-svc",
+    "host": "auth-svc-prod-01",
+    "level": "ERROR",
+    "trace_id": "t-cfg-err-01",
+    "logger": "io.lettuce.core.RedisConnectionException",
+    "message": "Unable to connect to Redis: redis-prod-eu.internal:6379 — Connection refused",
+    "thread": "lettuce-nioEventLoop-4",
+    "stack_trace": "io.lettuce.core.RedisConnectionException: Unable to connect\n\tat io.lettuce.core.AbstractRedisClient.connect(AbstractRedisClient.java:231)\n\tat com.company.auth.cache.TokenCache.connect(TokenCache.java:55)",
+    "env": "production"
+  },
+  {
+    "id": "cfg-003",
+    "timestamp": "2022-07-04T10:31:06Z",
+    "service": "auth-svc",
+    "host": "auth-svc-prod-01",
+    "level": "ERROR",
+    "trace_id": "t-cfg-err-01",
+    "logger": "com.company.auth.TokenService",
+    "message": "Token validation failed — cache unavailable, fallback to DB disabled",
+    "thread": "http-nio-8080-exec-1",
+    "http_status": 503,
+    "env": "production"
+  },
+  {
+    "id": "cfg-004",
+    "timestamp": "2022-07-04T10:31:08Z",
+    "service": "auth-svc",
+    "host": "auth-svc-prod-02",
+    "level": "ERROR",
+    "trace_id": "t-cfg-err-02",
+    "logger": "io.lettuce.core.RedisConnectionException",
+    "message": "Unable to connect to Redis: redis-prod-eu.internal:6379 — Connection refused",
+    "thread": "lettuce-nioEventLoop-4",
+    "stack_trace": "io.lettuce.core.RedisConnectionException: Unable to connect\n\tat io.lettuce.core.AbstractRedisClient.connect(AbstractRedisClient.java:231)",
+    "env": "production"
+  },
+  {
+    "id": "cfg-005",
+    "timestamp": "2022-07-04T10:31:10Z",
+    "service": "api-gateway",
+    "host": "api-gw-prod-01",
+    "level": "WARN",
+    "trace_id": "t-cfg-gw-01",
+    "logger": "com.company.gateway.AuthFilter",
+    "message": "Auth service returning 503 — 28 requests rejected in last 10s",
+    "thread": "gateway-exec-2",
+    "env": "production"
+  },
+  {
+    "id": "cfg-006",
+    "timestamp": "2022-07-04T10:31:15Z",
+    "service": "auth-svc",
+    "host": "auth-svc-prod-01",
+    "level": "ERROR",
+    "trace_id": "t-cfg-err-03",
+    "logger": "io.lettuce.core.RedisConnectionException",
+    "message": "Unable to connect to Redis: redis-prod-eu.internal:6379 — Connection refused (host changed in env config at 10:30 deploy)",
+    "thread": "lettuce-nioEventLoop-4",
+    "env": "production"
+  }
+]

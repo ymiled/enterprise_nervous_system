@@ -1,0 +1,24 @@
+[project]
+name = "enterprise-nervous-system"
+version = "0.1.0"
+description = "Cross-silo incident resolution swarm — autonomous root-cause analysis"
+requires-python = ">=3.11"
+dependencies = [
+    "fastmcp>=2.0.0",
+    "ag2[mcp,anthropic]>=0.4.0",
+    "pydantic>=2.0.0",
+    "python-dotenv>=1.0.0",
+    "httpx>=0.27.0",
+    "rich>=13.0.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.23.0",
+]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+

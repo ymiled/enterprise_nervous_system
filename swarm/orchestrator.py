@@ -35,7 +35,7 @@ from config.settings import (
     DEFAULT_INCIDENT_TIME,
     LLM_CONFIG,
 )
-from agents.prompts import CRITIC_PROMPT, DEVOPS_PROMPT, PM_PROMPT, SWE_PROMPT
+from agents.prompts import CRITIC_PROMPT, CRITIC_SELF_CORRECT_PROMPT, DEVOPS_PROMPT, PM_PROMPT, SWE_PROMPT
 from schemas.postmortem import PostMortem
 
 MCP_DIR = Path(__file__).parent.parent / "mcp_servers"
@@ -107,7 +107,7 @@ async def run_incident_analysis(
 
                 pm_agent = AssistantAgent(
                     name="PM_Agent",
-                    system_message=PM_PROMPT,
+                    system_message=PM_PROMPT.format(jira_project=jira_project),
                     llm_config=LLM_CONFIG,
                     human_input_mode="NEVER",
                 )
@@ -122,15 +122,14 @@ async def run_incident_analysis(
                 )
 
                 # GroupChat
-                # "auto" lets the LLM decide who speaks next so each specialist
-                # can finish all their tool calls before the next one starts.
+                # "round_robin" ensures each agent gets a turn to speak.
                 # Termination is on the manager so it triggers the moment the
                 # Critic emits the ```json block.
                 groupchat = GroupChat(
                     agents=[devops_agent, swe_agent, pm_agent, critic_agent],
                     messages=[],
-                    max_round=40,
-                    speaker_selection_method="auto",
+                    max_round=20,
+                    speaker_selection_method="round_robin",
                 )
 
                 chat_manager = GroupChatManager(
@@ -144,6 +143,19 @@ async def run_incident_analysis(
                     message=incident_brief,
                     silent=False,
                 )
+
+                # Self-correction pass: if the Critic produced a JSON block but it
+                # has empty evidence.commits or evidence.logs, ask it to fix that.
+                pm = _extract_postmortem(groupchat.messages)
+                if pm is not None and (not pm.evidence.commits or not pm.evidence.logs):
+                    await devops_agent.a_initiate_chat(
+                        chat_manager,
+                        message=CRITIC_SELF_CORRECT_PROMPT.format(
+                            missing="evidence.commits" if not pm.evidence.commits else "evidence.logs"
+                        ),
+                        silent=False,
+                        clear_history=False,
+                    )
 
     return _extract_postmortem(groupchat.messages)
 
@@ -185,8 +197,13 @@ def _extract_postmortem(messages: list[dict]) -> PostMortem | None:
         try:
             data = json.loads(raw)
             return PostMortem(**data)
+        except json.JSONDecodeError as exc:
+            print(f"[WARN] Critic JSON is malformed: {exc}", file=sys.stderr)
+            print(f"[DEBUG] Raw excerpt: {raw[:300]}", file=sys.stderr)
+            return None
         except Exception as exc:
             print(f"[WARN] PostMortem validation failed: {exc}", file=sys.stderr)
+            print(f"[DEBUG] Raw JSON:\n{raw}", file=sys.stderr)
             return None
 
     print("[WARN] No JSON block found in Critic_Agent messages.", file=sys.stderr)

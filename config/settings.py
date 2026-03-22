@@ -8,6 +8,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
+GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 
 # MCP server modes
 GITHUB_MODE: str = os.getenv("GITHUB_MODE", "mock")
@@ -33,15 +34,18 @@ DEFAULT_INCIDENT_SERVICE: str = os.getenv("DEFAULT_INCIDENT_SERVICE", "payment-s
 DEFAULT_INCIDENT_TIME: str = os.getenv("DEFAULT_INCIDENT_TIME", "2021-12-10T06:15:00Z")
 DEFAULT_INCIDENT_SEVERITY: str = os.getenv("DEFAULT_INCIDENT_SEVERITY", "P0")
 
-# AG2 LLM config — Anthropic Claude
+# AG2 LLM config — Groq via OpenAI-compatible endpoint (free tier)
+# api_type "openai" + base_url routes through AG2's well-tested OpenAI client,
+# which supports function/tool calling that the MCP toolkit registration requires.
 LLM_CONFIG: dict = {
     "config_list": [
         {
-            "model": "claude-haiku-4-5-20251001",
-            "api_key": ANTHROPIC_API_KEY,
-            "api_type": "anthropic",
+            "model": "llama-3.3-70b-versatile",
+            "api_key": GROQ_API_KEY,
+            "api_type": "openai",
+            "base_url": "https://api.groq.com/openai/v1",
         }
     ],
-    "temperature": 0.1,
+    "temperature": 0.0,
     "cache_seed": None,
 }

@@ -23,7 +23,7 @@ from mcp_servers.github_mcp import get_commit_diff, get_recent_commits, search_c
 from mcp_servers.jira_mcp import get_recent_tickets, get_ticket, search_tickets
 
 
-# ── Logs MCP ──────────────────────────────────────────────────────────────────
+# Logs MCP
 
 class TestLogsMCP:
     def test_query_logs_returns_errors_for_payment_svc(self):
@@ -84,7 +84,7 @@ class TestLogsMCP:
         assert result["has_errors"] is False
 
 
-# ── GitHub MCP ────────────────────────────────────────────────────────────────
+# GitHub MCP 
 
 class TestGitHubMCP:
     def test_get_recent_commits_returns_results(self):
@@ -128,7 +128,7 @@ class TestGitHubMCP:
         assert any("hotfix" in c.get("message", "").lower() for c in results)
 
 
-# ── Jira MCP ──────────────────────────────────────────────────────────────────
+# Jira MCP 
 
 class TestJiraMCP:
     def test_get_recent_tickets_returns_results(self):

@@ -88,11 +88,13 @@ def query_logs(
         entry_rank = level_rank.get(entry.get("level", "INFO"), 0)
         if entry_rank < min_rank:
             continue
-        # Strip host to avoid PII-adjacent infrastructure details in output
+        # Strip host and truncate long messages to keep context manageable
         safe_entry = {k: v for k, v in entry.items() if k != "host"}
+        if "message" in safe_entry:
+            safe_entry["message"] = safe_entry["message"][:300]
         results.append(safe_entry)
 
-    return sorted(results, key=lambda e: e["timestamp"])
+    return sorted(results, key=lambda e: e["timestamp"])[:15]
 
 
 @mcp.tool()
@@ -129,7 +131,7 @@ def get_error_spike(
         if e.get("service") == service and _parse_ts(e["timestamp"]) >= cutoff
     ]
 
-    errors = [e for e in window_logs if e.get("level") in ("ERROR", "FATAL")]
+    errors = [e for e in window_logs if e.get("level") in ("ERROR", "FATAL", "WARN")]
     error_rate = (len(errors) / len(window_logs) * 100) if window_logs else 0.0
 
     messages = [e.get("message", "") for e in errors]
@@ -148,7 +150,7 @@ def get_error_spike(
         "total_count": len(window_logs),
         "error_rate_pct": round(error_rate, 1),
         "spike_detected": error_rate > 20.0,
-        "most_common_error": most_common,
+        "most_common_error": most_common[:300],
         "earliest_error_ts": earliest_error_ts,
         "implicated_loggers": loggers,
     }

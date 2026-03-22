@@ -46,3 +46,13 @@ htmlcov/
 # MCP server sockets / temp
 *.sock
 tmp/
+
+# Raw datasets (large, download separately)
+data/raw/
+
+# Benchmark results (machine-generated)
+benchmarks/results/
+
+
+data/raw/
+docs/

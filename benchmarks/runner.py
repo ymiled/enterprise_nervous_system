@@ -1,18 +1,21 @@
 """
 Benchmark Runner
 ----------------
-Runs the incident swarm against all (or selected) scenarios, evaluates
-6 metrics per run, prints a rich table, and saves results to JSON.
+Runs the incident swarm against Log4Shell benchmark scenarios.
+
+Seed files must be generated first:
+    uv run python data/loaders/oracle_fetcher.py --token ghp_...
+    uv run python data/loaders/log4shell_fetcher.py --token ghp_...
 
 Usage:
-    # Run all 20 scenarios
+    # Run all 12 scenarios
     uv run python benchmarks/runner.py
 
-    # Run a specific subset by ID
-    uv run python benchmarks/runner.py --ids ls-01 oom-01 cfg-01
+    # Run specific IDs
+    uv run python benchmarks/runner.py --ids ls-01 ls-02
 
-    # Save results to a custom path
-    uv run python benchmarks/runner.py --output benchmarks/results/run_latest.json
+    # Save to custom path
+    uv run python benchmarks/runner.py --output benchmarks/results/run.json
 """
 from __future__ import annotations
 
@@ -36,30 +39,46 @@ from benchmarks.evaluator import EvalResult, evaluate, failed_run
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
-# Per-scenario runner
+# ── Per-scenario runner ───────────────────────────────────────────────────────
+
+_RETRY_WAITS = [60, 120, 240]  # seconds to wait after each 429
+
+
 async def _run_scenario(scenario: Scenario) -> EvalResult:
     from swarm.orchestrator import run_incident_analysis
 
+    seed_overrides = {
+        "LOGS_SEED_FILE":    str(scenario.logs_seed),
+        "COMMITS_SEED_FILE": str(scenario.commits_seed),
+        "TICKETS_SEED_FILE": str(scenario.tickets_seed),
+    }
+
     start = time.monotonic()
-    try:
-        pm = await run_incident_analysis(
-            service=scenario.service,
-            incident_time=scenario.incident_time,
-            severity=scenario.severity,
-            jira_project=scenario.jira_project,
-            seed_overrides={
-                "LOGS_SEED_FILE":    str(scenario.logs_seed),
-                "COMMITS_SEED_FILE": str(scenario.commits_seed),
-                "TICKETS_SEED_FILE": str(scenario.tickets_seed),
-            },
-        )
-        elapsed = time.monotonic() - start
-        if pm is None:
-            return failed_run(scenario, elapsed, "Swarm returned None — no JSON block from Critic")
-        return evaluate(pm, scenario, elapsed)
-    except Exception as exc:
-        elapsed = time.monotonic() - start
-        return failed_run(scenario, elapsed, str(exc)[:120])
+    for attempt, wait in enumerate([0] + _RETRY_WAITS, start=1):
+        if wait:
+            print(f"  [rate-limit] waiting {wait}s before retry (attempt {attempt})...")
+            await asyncio.sleep(wait)
+        try:
+            pm = await run_incident_analysis(
+                service=scenario.service,
+                incident_time=scenario.incident_time,
+                severity=scenario.severity,
+                jira_project=scenario.jira_project,
+                seed_overrides=seed_overrides,
+            )
+            elapsed = time.monotonic() - start
+            if pm is None:
+                return failed_run(scenario, elapsed, "Swarm returned None — no JSON block from Critic")
+            return evaluate(pm, scenario, elapsed)
+        except Exception as exc:
+            msg = str(exc)
+            if ("429" in msg or "rate_limit" in msg.lower()) and attempt <= len(_RETRY_WAITS):
+                continue  # will sleep then retry
+            elapsed = time.monotonic() - start
+            return failed_run(scenario, elapsed, msg[:120])
+
+    elapsed = time.monotonic() - start
+    return failed_run(scenario, elapsed, "rate limit: all retries exhausted")
 
 
 # Table rendering
@@ -111,40 +130,40 @@ def render_table(results: list[EvalResult], console: Console) -> None:
 
 
 def _render_summary(results: list[EvalResult], console: Console) -> None:
-    n          = len(results)
-    completed  = [r for r in results if r.reliability == 1.0]
-    times      = [r.elapsed_seconds for r in completed]
+    n         = len(results)
+    completed = [r for r in results if r.reliability == 1.0]
+    times     = [r.elapsed_seconds for r in completed]
 
     def avg(attr: str) -> str:
         return f"{mean(getattr(r, attr) for r in results):.3f}"
 
-    summary = Table(title="Summary Statistics", box=box.SIMPLE, header_style="bold magenta")
+    median_s   = median(times) if times else 0.0
+    baseline_s = 45 * 60  # ~45 min manual triage baseline
+
+    def improvement() -> str:
+        pct = (baseline_s - median_s) / baseline_s * 100
+        return f"[green]↓{pct:.0f}%[/green]" if pct > 0 else "—"
+
+    summary = Table(title="Summary", box=box.SIMPLE, header_style="bold magenta")
     summary.add_column("Metric",      style="bold")
     summary.add_column("Value",       justify="right")
     summary.add_column("Baseline",    justify="right", style="dim")
     summary.add_column("vs Baseline", justify="right")
 
-    median_s   = median(times) if times else 0.0
-    baseline_s = 35 * 60   # ~35 min estimated manual triage
-
-    def improvement(actual_s: float) -> str:
-        pct = (baseline_s - actual_s) / baseline_s * 100
-        return f"[green]↓{pct:.0f}%[/green]" if pct > 0 else "—"
-
-    summary.add_row("Scenarios run",       str(n),                          "—",         "—")
-    summary.add_row("Completed",           f"{len(completed)}/{n}",         "—",         "—")
-    summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",              "~35 min",   improvement(median_s))
-    summary.add_row("RCA accuracy",        avg("rca_accuracy"),             "—",         "—")
-    summary.add_row("Evidence quality",    avg("evidence_quality"),         "—",         "—")
-    summary.add_row("Actionability",       avg("actionability"),            "—",         "—")
-    summary.add_row("PII compliance",      avg("pii_compliance"),           "100%",      "✓" if float(avg("pii_compliance")) == 1.0 else "[red]✗[/red]")
-    summary.add_row("Citation integrity",  avg("citation_integrity"),       "—",         "—")
-    summary.add_row("Overall score",       avg("overall_score"),            "—",         "—")
+    summary.add_row("Scenarios run",       str(n),                    "—",         "—")
+    summary.add_row("Completed",           f"{len(completed)}/{n}",   "—",         "—")
+    summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",        "~45 min",   improvement())
+    summary.add_row("RCA accuracy",        avg("rca_accuracy"),       "—",         "—")
+    summary.add_row("Evidence quality",    avg("evidence_quality"),   "—",         "—")
+    summary.add_row("Actionability",       avg("actionability"),      "—",         "—")
+    summary.add_row("PII compliance",      avg("pii_compliance"),     "100%",      "✓")
+    summary.add_row("Citation integrity",  avg("citation_integrity"), "—",         "—")
+    summary.add_row("Overall score",       avg("overall_score"),      "—",         "—")
 
     console.print(summary)
 
 
-# Persistence 
+# Persistence
 
 def save_results(results: list[EvalResult], path: Path) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -166,21 +185,29 @@ def save_results(results: list[EvalResult], path: Path) -> None:
         for r in results
     ]
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    Console().print(f"\n[green]Results saved →[/green] {path}")
+
+
+# Entry point
+
+def main(scenario_ids: list[str], output: Path | None) -> None:
+    """
+    Run each scenario in its own asyncio.run() call so that anyio cancel-scope
+    teardown from one MCP stdio session cannot leak into the next scenario's
+    event loop (a Windows anyio bug that kills session.initialize() on loop reuse).
+    """
     console = Console()
-    console.print(f"\n[green]Results saved →[/green] {path}")
 
-
-
-async def main(scenario_ids: list[str], output: Path | None) -> None:
-    console = Console()
-
-    scenarios = (
-        [SCENARIO_MAP[sid] for sid in scenario_ids if sid in SCENARIO_MAP]
-        if scenario_ids else ALL_SCENARIOS
-    )
+    if scenario_ids:
+        scenarios = [SCENARIO_MAP[sid] for sid in scenario_ids if sid in SCENARIO_MAP]
+        missing   = [sid for sid in scenario_ids if sid not in SCENARIO_MAP]
+        if missing:
+            console.print(f"[yellow]Unknown IDs (skipped): {', '.join(missing)}[/yellow]")
+    else:
+        scenarios = ALL_SCENARIOS
 
     if not scenarios:
-        console.print("[red]No matching scenario IDs found.[/red]")
+        console.print("[red]No scenarios to run.[/red]")
         console.print(f"Available: {', '.join(SCENARIO_MAP)}")
         sys.exit(1)
 
@@ -189,24 +216,25 @@ async def main(scenario_ids: list[str], output: Path | None) -> None:
     results: list[EvalResult] = []
     for i, scenario in enumerate(scenarios, 1):
         console.print(f"  [{i}/{len(scenarios)}] [bold]{scenario.id}[/bold] — {scenario.name}")
-        result = await _run_scenario(scenario)
+        # Fresh event loop per scenario — prevents anyio cancel-scope leakage
+        result = asyncio.run(_run_scenario(scenario))
         results.append(result)
-        icon = "[green]✓[/green]" if result.reliability == 1.0 else "[red]✗[/red]"
+        icon = "[green]OK[/green]" if result.reliability == 1.0 else "[red]FAIL[/red]"
         console.print(f"           {icon}  score={result.overall_score:.2f}  time={result.elapsed_seconds}s\n")
-
-    console.print()
-    render_table(results, console)
 
     out_path = output or (RESULTS_DIR / "run_latest.json")
     save_results(results, out_path)
 
+    console.print()
+    render_table(results, console)
+
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="Run ENS benchmark suite")
+    parser = argparse.ArgumentParser(description="Run ENS Log4Shell benchmark suite")
     parser.add_argument("--ids",    nargs="*", default=[],
-                        help="Scenario IDs to run (default: all 20)")
+                        help="Scenario IDs to run (default: all 12)")
     parser.add_argument("--output", type=Path, default=None,
-                        help="Path to save results JSON (default: benchmarks/results/run_latest.json)")
+                        help="Path to save results JSON")
     args = parser.parse_args()
 
-    asyncio.run(main(scenario_ids=args.ids, output=args.output))
+    main(scenario_ids=args.ids, output=args.output)

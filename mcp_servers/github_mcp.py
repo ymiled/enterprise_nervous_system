@@ -67,32 +67,48 @@ def _github_headers() -> dict[str, str]:
 
 # Mock implementations
 
+def _commit_ts(c: dict) -> datetime:
+    """Seed uses 'date'; live code uses 'timestamp'. Handle both."""
+    return _parse_ts(c.get("timestamp") or c["date"])
+
+
+def _slim(c: dict) -> dict:
+    """Return a lightweight commit summary — no raw diff to keep context small."""
+    return {
+        "sha": c["sha"],
+        "short_sha": c.get("sha_short", c["sha"][:8]),
+        "repo": c.get("repo", "apache/logging-log4j2"),
+        "timestamp": c.get("timestamp") or c["date"],
+        "message": c["message"],
+        "files_changed": c.get("files_changed", []),
+    }
+
+
 def _mock_recent_commits(repo: str, hours_back: int) -> list[dict[str, Any]]:
     commits = _load_seed_commits()
-    # Determine reference time from seed
-    all_ts = [_parse_ts(c["timestamp"]) for c in commits]
-    ref_time = max(all_ts)
+    ref_time = max(_commit_ts(c) for c in commits)
     cutoff = ref_time - timedelta(hours=hours_back)
+    # Mock data has no 'repo' field — return all commits within the time window
     filtered = [
-        _scrub_author(c) for c in commits
-        if c.get("repo") == repo and _parse_ts(c["timestamp"]) >= cutoff
+        _slim(_scrub_author(c)) for c in commits
+        if _commit_ts(c) >= cutoff
     ]
-    return sorted(filtered, key=lambda c: c["timestamp"], reverse=True)
+    return sorted(filtered, key=lambda c: c["timestamp"], reverse=True)[:20]
 
 
 def _mock_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
     commits = _load_seed_commits()
     for c in commits:
-        if c["sha"].startswith(commit_sha) or c.get("short_sha", "") == commit_sha:
+        if c["sha"].startswith(commit_sha) or c.get("sha_short", c["sha"][:8]) == commit_sha:
             return _scrub_author({
                 "sha": c["sha"],
-                "short_sha": c["short_sha"],
-                "repo": c["repo"],
-                "timestamp": c["timestamp"],
+                "short_sha": c.get("sha_short", c["sha"][:8]),
+                "repo": c.get("repo", repo),
+                "timestamp": c.get("timestamp") or c["date"],
                 "message": c["message"],
                 "body": c.get("body", ""),
                 "files_changed": c.get("files_changed", []),
-                "diff_summary": c.get("diff_summary", {}),
+                "diff_summary": c.get("diff_summary") or {"patch": c.get("diff", "")[:2000]},
                 "pr_number": c.get("pr_number"),
                 "pr_title": c.get("pr_title"),
                 "ci_status": c.get("ci_status"),
@@ -103,15 +119,12 @@ def _mock_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
 def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[str, Any]]:
     commits = _load_seed_commits()
     kw = keyword.lower()
-    all_ts = [_parse_ts(c["timestamp"]) for c in commits]
-    ref_time = max(all_ts)
+    ref_time = max(_commit_ts(c) for c in commits)
     cutoff = ref_time - timedelta(hours=hours_back)
 
     results = []
     for c in commits:
-        if c.get("repo") != repo:
-            continue
-        if _parse_ts(c["timestamp"]) < cutoff:
+        if _commit_ts(c) < cutoff:
             continue
         searchable = " ".join([
             c.get("message", ""),
@@ -119,8 +132,8 @@ def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[
             " ".join(c.get("files_changed", [])),
         ]).lower()
         if kw in searchable:
-            results.append(_scrub_author(c))
-    return sorted(results, key=lambda c: c["timestamp"], reverse=True)
+            results.append(_slim(_scrub_author(c)))
+    return sorted(results, key=lambda c: c["timestamp"], reverse=True)[:10]
 
 
 # Live implementations

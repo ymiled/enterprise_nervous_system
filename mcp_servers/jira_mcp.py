@@ -48,7 +48,27 @@ mcp = FastMCP(
 
 def _load_seed_tickets() -> list[dict[str, Any]]:
     with open(TICKETS_SEED_FILE, encoding="utf-8") as f:
-        return json.load(f)
+        raw = json.load(f)
+    return [_normalize_seed_ticket(t) for t in raw]
+
+
+def _normalize_seed_ticket(t: dict) -> dict:
+    """Normalize seed ticket to a consistent internal schema.
+
+    The log4shell_fetcher.py writes tickets with 'id'/'created' fields while
+    the live Jira API (and older seeds) use 'ticket_id'/'updated'/'project'.
+    This normalises both formats so mock functions work with either.
+    """
+    ticket_id = t.get("ticket_id") or t.get("id", "")
+    # Infer project from ticket key prefix: "LOG4J2-3198" -> "LOG4J2"
+    project = t.get("project") or (ticket_id.rsplit("-", 1)[0] if "-" in ticket_id else "")
+    # Prefer 'updated'; fall back to 'created', converting bare dates to ISO datetimes
+    created = t.get("created", "")
+    updated = t.get("updated") or (
+        created + "T00:00:00Z" if created and "T" not in created else created or "2000-01-01T00:00:00Z"
+    )
+    url = t.get("url") or f"https://issues.apache.org/jira/browse/{ticket_id}"
+    return {**t, "ticket_id": ticket_id, "project": project, "updated": updated, "url": url}
 
 
 def _parse_ts(ts: str) -> datetime:

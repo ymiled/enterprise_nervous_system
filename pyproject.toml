@@ -5,11 +5,12 @@ description = "Cross-silo incident resolution swarm — autonomous root-cause an
 requires-python = ">=3.11"
 dependencies = [
     "fastmcp>=2.0.0",
-    "ag2[mcp,anthropic]>=0.4.0",
+    "ag2[mcp,openai]>=0.4.0",
     "pydantic>=2.0.0",
     "python-dotenv>=1.0.0",
     "httpx>=0.27.0",
     "rich>=13.0.0",
+    "groq"
 ]
 
 [project.optional-dependencies]

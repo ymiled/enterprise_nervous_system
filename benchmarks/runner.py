@@ -39,12 +39,15 @@ from benchmarks.evaluator import EvalResult, evaluate, failed_run
 RESULTS_DIR = Path(__file__).parent / "results"
 
 
-# ── Per-scenario runner ───────────────────────────────────────────────────────
+# Per-scenario runner
 
-_RETRY_WAITS = [60, 120, 240]  # seconds to wait after each 429
+# Waits after a 429; also used when the swarm returns None (Critic failed to emit JSON).
+# A short wait drains Groq's token-per-minute window so the retry has a clean budget.
+_RETRY_WAITS = [30, 60, 120]  # seconds
 
 
-async def _run_scenario(scenario: Scenario) -> EvalResult:
+async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
+    """Single attempt — no sleeps. Retry logic lives in main() using time.sleep()."""
     from swarm.orchestrator import run_incident_analysis
 
     seed_overrides = {
@@ -53,32 +56,21 @@ async def _run_scenario(scenario: Scenario) -> EvalResult:
         "TICKETS_SEED_FILE": str(scenario.tickets_seed),
     }
 
-    start = time.monotonic()
-    for attempt, wait in enumerate([0] + _RETRY_WAITS, start=1):
-        if wait:
-            print(f"  [rate-limit] waiting {wait}s before retry (attempt {attempt})...")
-            await asyncio.sleep(wait)
-        try:
-            pm = await run_incident_analysis(
-                service=scenario.service,
-                incident_time=scenario.incident_time,
-                severity=scenario.severity,
-                jira_project=scenario.jira_project,
-                seed_overrides=seed_overrides,
-            )
-            elapsed = time.monotonic() - start
-            if pm is None:
-                return failed_run(scenario, elapsed, "Swarm returned None — no JSON block from Critic")
-            return evaluate(pm, scenario, elapsed)
-        except Exception as exc:
-            msg = str(exc)
-            if ("429" in msg or "rate_limit" in msg.lower()) and attempt <= len(_RETRY_WAITS):
-                continue  # will sleep then retry
-            elapsed = time.monotonic() - start
-            return failed_run(scenario, elapsed, msg[:120])
-
-    elapsed = time.monotonic() - start
-    return failed_run(scenario, elapsed, "rate limit: all retries exhausted")
+    try:
+        pm = await run_incident_analysis(
+            service=scenario.service,
+            incident_time=scenario.incident_time,
+            severity=scenario.severity,
+            jira_project=scenario.jira_project,
+            seed_overrides=seed_overrides,
+        )
+        elapsed = time.monotonic() - start
+        if pm is None:
+            return failed_run(scenario, elapsed, "Swarm returned None — no JSON block from Critic")
+        return evaluate(pm, scenario, elapsed)
+    except Exception as exc:
+        elapsed = time.monotonic() - start
+        return failed_run(scenario, elapsed, str(exc)[:120])
 
 
 # Table rendering
@@ -93,7 +85,11 @@ def _fmt(v: float) -> str:
     return f"{v:.2f}"
 
 
-def render_table(results: list[EvalResult], console: Console) -> None:
+def render_table(
+    results: list[EvalResult],
+    console: Console,
+    manual_baseline_seconds: float | None = None,
+) -> None:
     table = Table(
         title="Enterprise Nervous System — Benchmark Results",
         box=box.ROUNDED,
@@ -126,10 +122,14 @@ def render_table(results: list[EvalResult], console: Console) -> None:
         )
 
     console.print(table)
-    _render_summary(results, console)
+    _render_summary(results, console, manual_baseline_seconds=manual_baseline_seconds)
 
 
-def _render_summary(results: list[EvalResult], console: Console) -> None:
+def _render_summary(
+    results: list[EvalResult],
+    console: Console,
+    manual_baseline_seconds: float | None = None,
+) -> None:
     n         = len(results)
     completed = [r for r in results if r.reliability == 1.0]
     times     = [r.elapsed_seconds for r in completed]
@@ -137,12 +137,19 @@ def _render_summary(results: list[EvalResult], console: Console) -> None:
     def avg(attr: str) -> str:
         return f"{mean(getattr(r, attr) for r in results):.3f}"
 
-    median_s   = median(times) if times else 0.0
-    baseline_s = 45 * 60  # ~45 min manual triage baseline
+    median_s = median(times) if times else 0.0
 
     def improvement() -> str:
-        pct = (baseline_s - median_s) / baseline_s * 100
+        if not manual_baseline_seconds:
+            return "n/a"
+        pct = (manual_baseline_seconds - median_s) / manual_baseline_seconds * 100
         return f"[green]↓{pct:.0f}%[/green]" if pct > 0 else "—"
+
+    baseline_label = (
+        f"{manual_baseline_seconds:.1f}s"
+        if manual_baseline_seconds
+        else "n/a"
+    )
 
     summary = Table(title="Summary", box=box.SIMPLE, header_style="bold magenta")
     summary.add_column("Metric",      style="bold")
@@ -152,7 +159,7 @@ def _render_summary(results: list[EvalResult], console: Console) -> None:
 
     summary.add_row("Scenarios run",       str(n),                    "—",         "—")
     summary.add_row("Completed",           f"{len(completed)}/{n}",   "—",         "—")
-    summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",        "~45 min",   improvement())
+    summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",        baseline_label, improvement())
     summary.add_row("RCA accuracy",        avg("rca_accuracy"),       "—",         "—")
     summary.add_row("Evidence quality",    avg("evidence_quality"),   "—",         "—")
     summary.add_row("Actionability",       avg("actionability"),      "—",         "—")
@@ -190,7 +197,11 @@ def save_results(results: list[EvalResult], path: Path) -> None:
 
 # Entry point
 
-def main(scenario_ids: list[str], output: Path | None) -> None:
+def main(
+    scenario_ids: list[str],
+    output: Path | None,
+    manual_baseline_seconds: float | None,
+) -> None:
     """
     Run each scenario in its own asyncio.run() call so that anyio cancel-scope
     teardown from one MCP stdio session cannot leak into the next scenario's
@@ -216,17 +227,39 @@ def main(scenario_ids: list[str], output: Path | None) -> None:
     results: list[EvalResult] = []
     for i, scenario in enumerate(scenarios, 1):
         console.print(f"  [{i}/{len(scenarios)}] [bold]{scenario.id}[/bold] — {scenario.name}")
-        # Fresh event loop per scenario — prevents anyio cancel-scope leakage
-        result = asyncio.run(_run_scenario(scenario))
+        start = time.monotonic()
+        result = None
+        for attempt, wait in enumerate([0] + _RETRY_WAITS, start=1):
+            if wait:
+                console.print(f"  [retry] waiting {wait}s before attempt {attempt}...")
+                time.sleep(wait)
+            # Fresh event loop per attempt — prevents anyio cancel-scope leakage
+            result = asyncio.run(_run_scenario(scenario, start))
+            msg = result.notes or ""
+            retriable = (
+                "Swarm returned None" in msg
+                or "429" in msg or "400" in msg or "403" in msg
+                or "500" in msg or "502" in msg or "503" in msg
+                or "rate_limit" in msg.lower()
+                or "tool call validation" in msg.lower()
+            ) and "401" not in msg
+            if not retriable or attempt > len(_RETRY_WAITS):
+                break
+            console.print(f"  [retry] attempt {attempt} failed: {msg[:80]}")
+        if result is None:
+            result = failed_run(scenario, time.monotonic() - start, "all retries exhausted")
         results.append(result)
         icon = "[green]OK[/green]" if result.reliability == 1.0 else "[red]FAIL[/red]"
         console.print(f"           {icon}  score={result.overall_score:.2f}  time={result.elapsed_seconds}s\n")
+        # Brief cooldown between scenarios to avoid Groq TPM exhaustion
+        if i < len(scenarios):
+            time.sleep(5)
 
     out_path = output or (RESULTS_DIR / "run_latest.json")
     save_results(results, out_path)
 
     console.print()
-    render_table(results, console)
+    render_table(results, console, manual_baseline_seconds=manual_baseline_seconds)
 
 
 if __name__ == "__main__":
@@ -235,6 +268,19 @@ if __name__ == "__main__":
                         help="Scenario IDs to run (default: all 12)")
     parser.add_argument("--output", type=Path, default=None,
                         help="Path to save results JSON")
+    parser.add_argument(
+        "--manual-baseline-seconds",
+        type=float,
+        default=None,
+        help=(
+            "Observed/manual median triage time in seconds. "
+            "Use only measured data; no default assumption is applied."
+        ),
+    )
     args = parser.parse_args()
 
-    main(scenario_ids=args.ids, output=args.output)
+    main(
+        scenario_ids=args.ids,
+        output=args.output,
+        manual_baseline_seconds=args.manual_baseline_seconds,
+    )

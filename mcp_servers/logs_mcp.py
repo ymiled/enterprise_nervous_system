@@ -25,7 +25,7 @@ from fastmcp import FastMCP
 
 # Allow running from project root or mcp_servers/
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import LOGS_SEED_FILE
+from config.settings import LOGS_MODE, LOGS_SEED_FILE
 
 mcp = FastMCP(
     "logs-server",
@@ -78,9 +78,12 @@ def query_logs(
     cutoff = ref_time.replace(tzinfo=timezone.utc) - __import__("datetime").timedelta(hours=time_range_hours)
     ref_time_tz = ref_time.replace(tzinfo=timezone.utc)
 
+    # In mock mode the seed only contains one service name; treat all entries as
+    # belonging to the requested service so non-payment-svc scenarios get data.
+    mock_mode = LOGS_MODE == "mock"
     results = []
     for entry in all_logs:
-        if entry.get("service") != service:
+        if not mock_mode and entry.get("service") != service:
             continue
         entry_ts = _parse_ts(entry["timestamp"])
         if entry_ts < cutoff:
@@ -126,9 +129,10 @@ def get_error_spike(
     ref_time = max(timestamps).replace(tzinfo=timezone.utc)
     cutoff = ref_time - __import__("datetime").timedelta(minutes=window_minutes)
 
+    mock_mode = LOGS_MODE == "mock"
     window_logs = [
         e for e in all_logs
-        if e.get("service") == service and _parse_ts(e["timestamp"]) >= cutoff
+        if (mock_mode or e.get("service") == service) and _parse_ts(e["timestamp"]) >= cutoff
     ]
 
     errors = [e for e in window_logs if e.get("level") in ("ERROR", "FATAL", "WARN")]

@@ -128,7 +128,7 @@ async def run_incident_analysis(
                 groupchat = GroupChat(
                     agents=[devops_agent, swe_agent, pm_agent, critic_agent],
                     messages=[],
-                    max_round=20,
+                    max_round=30,
                     speaker_selection_method="round_robin",
                 )
 

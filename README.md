@@ -50,47 +50,6 @@ An autonomous root-cause analysis system that queries GitHub, Jira, and applicat
 
 ---
 
-## Project Structure
-
-```
-enterprise_nervous_system/
-├── mcp_servers/
-│   ├── logs_mcp.py              # Tools: query_logs, get_error_spike, get_trace
-│   ├── github_mcp.py            # Tools: get_recent_commits, get_commit_diff, search_commits_by_keyword
-│   └── jira_mcp.py              # Tools: get_recent_tickets, get_ticket, search_tickets
-├── agents/
-│   └── prompts.py               # System prompts for DevOps, SWE, PM, Critic agents
-├── swarm/
-│   └── orchestrator.py          # AG2 MCPClientSessionManager wiring + Critic agent
-├── schemas/
-│   └── postmortem.py            # Pydantic PostMortem output contract
-├── config/
-│   └── settings.py              # Env config, governor rules, seed paths
-├── data/
-│   ├── seeds/                   # Synthetic + real-incident seed JSON (committed)
-│   │   ├── log4shell_*.json     # Log4Shell CVE-2021-44228 (synthetic)
-│   │   ├── oom_*.json           # OOM unbounded cache (synthetic)
-│   │   ├── config_error_*.json  # Redis misconfiguration (synthetic)
-│   │   ├── cloudflare_2019_*.json  # Cloudflare WAF outage (real)
-│   │   ├── github_2018_*.json      # GitHub MySQL failover (real)
-│   │   └── fastly_2021_*.json      # Fastly VCL compiler bug (real)
-│   ├── loaders/
-│   │   └── hdfs_loader.py       # Converts LogHub HDFS_v1 dataset → seed JSON
-│   └── raw/                     # Large downloaded datasets (git-ignored)
-├── benchmarks/
-│   ├── scenarios.py             # 20 synthetic scenarios (Scenario dataclass)
-│   ├── evaluator.py             # 6 deterministic metrics (EvalResult)
-│   ├── runner.py                # Benchmark runner for synthetic scenarios
-│   ├── scenarios.py        # 12 real-incident scenarios (RealScenario dataclass)
-│   ├── evaluator.py        # Keyword-based metrics for real incidents
-│   ├── runner.py           # Runner for real + combined (32) scenarios
-│   └── results/                 # JSON output files (git-ignored)
-└── tests/
-    └── test_mcp_servers.py      # Smoke tests for all 9 MCP tools
-```
-
----
-
 ## Quickstart
 
 **1. Install dependencies**
@@ -140,15 +99,9 @@ uv run python swarm/orchestrator.py --output postmortem.json
 
 ## Benchmark Suite
 
-The benchmark evaluates the swarm on **28 scenarios** across two tiers:
+The benchmark evaluates the swarm on **8 scenarios** across two tiers:
 
-### Tier 1 — Synthetic (20 scenarios)
-Hand-crafted scenarios with real SHA-prefix ground-truth oracles:
-- **12 Log4Shell variants** — commits/tickets from real `apache/logging-log4j2` repo + Apache JIRA
-- **4 OOM variants** — unbounded HashMap in order-svc
-- **4 Config error variants** — auth-svc pointing at wrong Redis endpoint
-
-### Tier 2 — Real labeled datasets (8 scenarios, download required)
+### Real labeled datasets (8 scenarios, download required)
 Ground truth from publicly available HPC cluster logs with anomaly labels:
 
 | ID | Dataset | Source |
@@ -203,78 +156,3 @@ uv run python data/loaders/hdfs_loader.py \
 The loader strips PII-adjacent fields, annotates each entry with anomaly status, balances the sample, and outputs the project's standard seed JSON schema.
 
 ---
-
-## Test Scenario — Log4Shell (CVE-2021-44228)
-
-The seed data encodes the complete causal chain of a real-world incident:
-
-| Time (UTC) | Event |
-|---|---|
-| 2021-11-28 14:32 | Commit `a3b4c5d6` upgrades `log4j-core` 2.13.3 → **2.14.1** (PR-2847) |
-| 2021-12-01 09:15 | Commit `b9c8d7e6` adds MDC logging of user-controlled HTTP headers |
-| 2021-12-08 10:00 | Ticket **PAY-441** flags suspicious JNDI outbound traffic |
-| 2021-12-10 06:14 | First JNDI exploit attempt logged in `payment-svc` |
-| 2021-12-10 06:15 | Error spike — 42 HTTP 500s/min, JVM crash on pod-02 |
-| 2021-12-10 08:30 | Hotfix commit `e7f8a9b0` applies `-Dlog4j2.formatMsgNoLookups=true` |
-
-**Expected RCA output:** The swarm should identify commit `a3b4c5d6` as root cause, cite ticket `PAY-441` as prior warning, and recommend upgrade to `log4j-core 2.15.0` tracked in `PAY-442`.
-
----
-
-## MCP Server Reference
-
-### logs_mcp.py
-| Tool | Args | Returns |
-|---|---|---|
-| `query_logs` | `service`, `severity`, `time_range_hours` | Filtered log entries, PII-scrubbed |
-| `get_error_spike` | `service`, `window_minutes` | Error rate analysis + spike detection |
-| `get_trace` | `trace_id` | All spans for a distributed trace |
-
-### github_mcp.py
-| Tool | Args | Returns |
-|---|---|---|
-| `get_recent_commits` | `repo`, `hours_back` | Commits in window, author identity scrubbed |
-| `get_commit_diff` | `commit_sha`, `repo` | Diff summary + files changed |
-| `search_commits_by_keyword` | `repo`, `keyword`, `hours_back` | Keyword-matched commits |
-
-### jira_mcp.py
-| Tool | Args | Returns |
-|---|---|---|
-| `get_recent_tickets` | `project`, `hours_back` | Tickets sorted by priority |
-| `get_ticket` | `ticket_id` | Full ticket detail, reporter/assignee scrubbed |
-| `search_tickets` | `query`, `project` | Full-text search results |
-
-All tools operate in `mock` mode by default (seed data, no external calls).
-Set `GITHUB_MODE=live`, `JIRA_MODE=live` in `.env` to hit real APIs.
-
----
-
-## Critic Agent Rules
-
-The AG2 Critic agent enforces these constraints before emitting the PostMortem:
-
-1. `root_cause` **must** cite an exact Git commit SHA (≥7 chars).
-2. `root_cause` **must** cite a logger name or trace ID from the logs.
-3. Every `recommended_action` **must** include a Jira `ticket_id`.
-4. Output **must not** contain real names, emails, or usernames — team names only.
-5. If `confidence_score < 0.7`, set `inconclusive=true` with a reason.
-6. Never speculate beyond what the three specialist agents found.
-
----
-
-## Roadmap
-
-- [x] MCP servers — logs, GitHub, Jira (mock + live modes)
-- [x] Pydantic PostMortem schema
-- [x] Log4Shell seed data (logs, commits, tickets)
-- [x] OOM + Config error seed scenarios
-- [x] AG2 agent prompts (DevOps, SWE, PM, Critic)
-- [x] AG2 swarm orchestrator with MCP wiring
-- [x] Smoke tests for all 9 MCP tools
-- [x] 20-scenario synthetic benchmark suite with real oracle SHAs (apache/logging-log4j2 + Apache JIRA)
-- [x] 8-scenario real-dataset benchmark tier (LogHub BGL + Thunderbird)
-- [x] LogHub HDFS_v1 data loader (11M log entries, block-level labels)
-- [x] LogHub BGL data loader (Blue Gene/L supercomputer failure logs)
-- [x] LogHub Thunderbird data loader (Sandia NL HPC, 211M lines)
-- [ ] CLI entrypoint `python -m ens diagnose --service payment-svc --since 2h`
-- [ ] Integration test — run full swarm against seed data, assert PostMortem fields

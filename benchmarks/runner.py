@@ -97,26 +97,28 @@ def render_table(
         header_style="bold cyan",
     )
     table.add_column("ID",            style="dim",     width=8)
-    table.add_column("Scenario",                       width=42)
+    table.add_column("Scenario",                       width=40)
     table.add_column("RCA\nAcc.",     justify="right", width=6)
     table.add_column("Evid.\nQual.",  justify="right", width=6)
     table.add_column("Action\n-able", justify="right", width=7)
     table.add_column("Reli-\nable",   justify="right", width=6)
     table.add_column("PII\nSafe",     justify="right", width=5)
     table.add_column("Cit.\nInteg.",  justify="right", width=6)
+    table.add_column("Reason\n-ing",  justify="right", width=7)
     table.add_column("Score",         justify="right", width=6)
     table.add_column("Time\n(s)",     justify="right", width=6)
 
     for r in results:
         table.add_row(
             r.scenario_id,
-            r.scenario_name[:42],
+            r.scenario_name[:40],
             f"[{_style(r.rca_accuracy)}]{_fmt(r.rca_accuracy)}[/]",
             f"[{_style(r.evidence_quality)}]{_fmt(r.evidence_quality)}[/]",
             f"[{_style(r.actionability)}]{_fmt(r.actionability)}[/]",
             f"[{_style(r.reliability)}]{_fmt(r.reliability)}[/]",
             f"[{_style(r.pii_compliance)}]{_fmt(r.pii_compliance)}[/]",
             f"[{_style(r.citation_integrity)}]{_fmt(r.citation_integrity)}[/]",
+            f"[{_style(r.reasoning_quality)}]{_fmt(r.reasoning_quality)}[/]",
             f"[bold]{_fmt(r.overall_score)}[/bold]",
             str(r.elapsed_seconds),
         )
@@ -160,12 +162,13 @@ def _render_summary(
     summary.add_row("Scenarios run",       str(n),                    "—",         "—")
     summary.add_row("Completed",           f"{len(completed)}/{n}",   "—",         "—")
     summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",        baseline_label, improvement())
-    summary.add_row("RCA accuracy",        avg("rca_accuracy"),       "—",         "—")
-    summary.add_row("Evidence quality",    avg("evidence_quality"),   "—",         "—")
-    summary.add_row("Actionability",       avg("actionability"),      "—",         "—")
-    summary.add_row("PII compliance",      avg("pii_compliance"),     "100%",      "✓")
-    summary.add_row("Citation integrity",  avg("citation_integrity"), "—",         "—")
-    summary.add_row("Overall score",       avg("overall_score"),      "—",         "—")
+    summary.add_row("RCA accuracy",        avg("rca_accuracy"),        "—",    "—")
+    summary.add_row("Evidence quality",    avg("evidence_quality"),    "—",    "—")
+    summary.add_row("Actionability",       avg("actionability"),       "—",    "—")
+    summary.add_row("PII compliance",      avg("pii_compliance"),      "100%", "✓")
+    summary.add_row("Citation integrity",  avg("citation_integrity"),  "—",    "—")
+    summary.add_row("Reasoning quality",   avg("reasoning_quality"),   "—",    "—")
+    summary.add_row("Overall score",       avg("overall_score"),       "—",    "—")
 
     console.print(summary)
 
@@ -184,6 +187,7 @@ def save_results(results: list[EvalResult], path: Path) -> None:
             "reliability":           r.reliability,
             "pii_compliance":        r.pii_compliance,
             "citation_integrity":    r.citation_integrity,
+            "reasoning_quality":     r.reasoning_quality,
             "overall_score":         r.overall_score,
             "elapsed_seconds":       r.elapsed_seconds,
             "postmortem_confidence": r.postmortem_confidence,

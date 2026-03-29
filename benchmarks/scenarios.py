@@ -53,6 +53,8 @@ class Scenario:
     expected_ticket_ids: list[str]
     expected_logger_keyword: str
     expected_root_cause_keyword: str
+    # Negative scenarios: swarm should report inconclusive rather than fabricate a root cause
+    expected_inconclusive: bool = False
 
 
 
@@ -146,8 +148,59 @@ LOG4SHELL_SCENARIOS: list[Scenario] = [
 ]
 
 
+# ── Negative scenarios (swarm should report inconclusive) ─────────────────────
+#
+# These use an unrelated Apache repo (commons-lang) and an unrelated Jira project
+# (COLLECTIONS) so GitHub and Jira return no Log4Shell-relevant data.
+# The logs MCP still serves the Log4Shell seed, creating a deliberate conflict:
+# logs show JNDI errors but commits and tickets have no matching context.
+# A solid swarm must notice this disconnect and report inconclusive rather than
+# hallucinating a root cause.
+
+_NEG = dict(
+    logs_seed    = SEEDS / "log4shell_logs.json",
+    commits_seed = SEEDS / "log4shell_logs.json",  # unused in live mode
+    tickets_seed = SEEDS / "log4shell_logs.json",  # unused in live mode
+    expected_commit_sha_prefix  = "",
+    expected_ticket_ids         = [],
+    expected_logger_keyword     = "",
+    expected_root_cause_keyword = "",
+    expected_inconclusive       = True,
+)
+
+NEGATIVE_SCENARIOS: list[Scenario] = [
+    Scenario(
+        id="neg-01",
+        name="Negative · commons-lang · no related commits or tickets",
+        service="inventory-svc",
+        incident_time="2021-06-15T10:00:00Z",
+        severity="P2",
+        jira_project="COLLECTIONS",
+        **_NEG,
+    ),
+    Scenario(
+        id="neg-02",
+        name="Negative · commons-lang · pre-CVE window · no JNDI context",
+        service="auth-svc",
+        incident_time="2021-09-01T08:00:00Z",
+        severity="P1",
+        jira_project="COLLECTIONS",
+        **_NEG,
+    ),
+    Scenario(
+        id="neg-03",
+        name="Negative · commons-lang · unrelated project · should be inconclusive",
+        service="notification-svc",
+        incident_time="2021-04-20T14:00:00Z",
+        severity="P2",
+        jira_project="COLLECTIONS",
+        **_NEG,
+    ),
+]
+
+
 # Exports
 
-ALL_SCENARIOS: list[Scenario] = LOG4SHELL_SCENARIOS
+ALL_SCENARIOS: list[Scenario] = LOG4SHELL_SCENARIOS + NEGATIVE_SCENARIOS
 
 SCENARIO_MAP: dict[str, Scenario] = {s.id: s for s in ALL_SCENARIOS}

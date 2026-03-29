@@ -24,6 +24,10 @@ JIRA_URL: str = os.getenv("JIRA_URL", "https://issues.apache.org/jira")
 JIRA_TOKEN: str = os.getenv("JIRA_TOKEN", "")
 JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
 
+# Elasticsearch (logs live backend)
+ES_URL: str   = os.getenv("ES_URL",   "http://localhost:9200")
+ES_INDEX: str = os.getenv("ES_INDEX", "ens-logs")
+
 # Seed data paths — overridable per-scenario via env vars (used by benchmark runner)
 SEEDS_DIR: Path = Path(__file__).parent.parent / "data" / "seeds"
 LOGS_SEED_FILE: Path = Path(os.getenv("LOGS_SEED_FILE", str(SEEDS_DIR / "log4shell_logs.json")))

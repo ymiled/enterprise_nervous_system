@@ -1,8 +1,12 @@
 """
 Logs MCP Server
 ---------------
-Exposes structured log query tools backed by mock seed data (Log4Shell incident).
-Swap LOGS_MODE=live and wire to your ELK/Datadog endpoint for production use.
+Exposes structured log query tools for incident analysis.
+
+Modes (set LOGS_MODE in .env):
+  mock — reads local seed JSON file. Default.
+  live — queries local Elasticsearch (docker compose up -d, then ingest once).
+         Set ES_URL and ES_INDEX in .env if non-default.
 
 Run standalone:
     python mcp_servers/logs_mcp.py
@@ -17,15 +21,16 @@ from __future__ import annotations
 import json
 import sys
 from collections import Counter
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 
+import httpx
 from fastmcp import FastMCP
 
 # Allow running from project root or mcp_servers/
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import LOGS_MODE, LOGS_SEED_FILE
+from config.settings import ES_INDEX, ES_URL, LOGS_MODE, LOGS_SEED_FILE
 
 mcp = FastMCP(
     "logs-server",
@@ -35,18 +40,174 @@ mcp = FastMCP(
     ),
 )
 
-# Seed data loader and helpers
+_LEVEL_RANK = {"INFO": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _parse_ts(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def _safe(entry: dict) -> dict:
+    """Strip host field and truncate long messages."""
+    e = {k: v for k, v in entry.items() if k != "host"}
+    if "message" in e:
+        e["message"] = e["message"][:300]
+    return e
+
+
+# ── Mock implementations ──────────────────────────────────────────────────────
 
 def _load_logs() -> list[dict[str, Any]]:
     with open(LOGS_SEED_FILE, encoding="utf-8") as f:
         return json.load(f)
 
 
-def _parse_ts(ts: str) -> datetime:
-    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+def _mock_query_logs(service: str, severity: str, time_range_hours: int) -> list[dict]:
+    min_rank = _LEVEL_RANK.get(severity, 2)
+    all_logs = _load_logs()
+    ref_time = max(_parse_ts(e["timestamp"]) for e in all_logs).replace(tzinfo=timezone.utc)
+    cutoff   = ref_time - timedelta(hours=time_range_hours)
+
+    results = []
+    for entry in all_logs:
+        if _parse_ts(entry["timestamp"]) < cutoff:
+            continue
+        if _LEVEL_RANK.get(entry.get("level", "INFO"), 0) < min_rank:
+            continue
+        results.append(_safe(entry))
+    return sorted(results, key=lambda e: e["timestamp"])[:15]
 
 
-# Tools 
+def _mock_error_spike(service: str, window_minutes: int) -> dict:
+    all_logs = _load_logs()
+    ref_time = max(_parse_ts(e["timestamp"]) for e in all_logs).replace(tzinfo=timezone.utc)
+    cutoff   = ref_time - timedelta(minutes=window_minutes)
+    window   = [e for e in all_logs if _parse_ts(e["timestamp"]) >= cutoff]
+
+    errors = [e for e in window if e.get("level") in ("ERROR", "FATAL", "WARN")]
+    error_rate = (len(errors) / len(window) * 100) if window else 0.0
+    most_common = Counter(e.get("message", "") for e in errors).most_common(1)
+
+    return {
+        "service": service,
+        "window_minutes": window_minutes,
+        "error_count": len(errors),
+        "total_count": len(window),
+        "error_rate_pct": round(error_rate, 1),
+        "spike_detected": error_rate > 20.0,
+        "most_common_error": (most_common[0][0] if most_common else "")[:300],
+        "earliest_error_ts": min(e["timestamp"] for e in errors) if errors else None,
+        "implicated_loggers": list({e.get("logger", "") for e in errors if e.get("logger")}),
+    }
+
+
+def _mock_get_trace(trace_id: str) -> dict:
+    all_logs = _load_logs()
+    spans  = sorted(
+        [_safe(e) for e in all_logs if e.get("trace_id") == trace_id],
+        key=lambda e: e["timestamp"],
+    )
+    errors = [s for s in spans if s.get("level") in ("ERROR", "FATAL")]
+    return {
+        "trace_id": trace_id,
+        "spans": spans,
+        "services_involved": list({s.get("service", "") for s in spans}),
+        "has_errors": bool(errors),
+        "error_summary": " | ".join(e.get("message", "") for e in errors) or None,
+    }
+
+
+# ── Live implementations (Elasticsearch) ─────────────────────────────────────
+
+def _es_ref_time(client: httpx.Client) -> datetime:
+    """Return the timestamp of the most recent document in the index."""
+    resp = client.post(
+        f"{ES_URL}/{ES_INDEX}/_search",
+        json={"size": 1, "sort": [{"timestamp": "desc"}], "_source": ["timestamp"]},
+    )
+    resp.raise_for_status()
+    hits = resp.json()["hits"]["hits"]
+    if not hits:
+        return datetime.now(timezone.utc)
+    return _parse_ts(hits[0]["_source"]["timestamp"])
+
+
+def _es_query(client: httpx.Client, query: dict, size: int = 100) -> list[dict]:
+    resp = client.post(
+        f"{ES_URL}/{ES_INDEX}/_search",
+        json={"query": query, "sort": [{"timestamp": "asc"}], "size": size},
+    )
+    resp.raise_for_status()
+    return [hit["_source"] for hit in resp.json()["hits"]["hits"]]
+
+
+def _live_query_logs(service: str, severity: str, time_range_hours: int) -> list[dict]:
+    min_rank = _LEVEL_RANK.get(severity, 2)
+    levels   = [l for l, r in _LEVEL_RANK.items() if r >= min_rank]
+
+    with httpx.Client(timeout=15) as client:
+        cutoff = (_es_ref_time(client) - timedelta(hours=time_range_hours)).isoformat()
+        query  = {
+            "bool": {
+                "filter": [
+                    {"term":  {"service": service}},
+                    {"terms": {"level": levels}},
+                    {"range": {"timestamp": {"gte": cutoff}}},
+                ]
+            }
+        }
+        docs = _es_query(client, query, size=15)
+
+    return [_safe(d) for d in docs]
+
+
+def _live_error_spike(service: str, window_minutes: int) -> dict:
+    with httpx.Client(timeout=15) as client:
+        cutoff = (_es_ref_time(client) - timedelta(minutes=window_minutes)).isoformat()
+        query  = {
+            "bool": {
+                "filter": [
+                    {"term":  {"service": service}},
+                    {"range": {"timestamp": {"gte": cutoff}}},
+                ]
+            }
+        }
+        window = _es_query(client, query, size=1000)
+
+    errors     = [e for e in window if e.get("level") in ("ERROR", "FATAL", "WARN")]
+    error_rate = (len(errors) / len(window) * 100) if window else 0.0
+    most_common = Counter(e.get("message", "") for e in errors).most_common(1)
+
+    return {
+        "service": service,
+        "window_minutes": window_minutes,
+        "error_count": len(errors),
+        "total_count": len(window),
+        "error_rate_pct": round(error_rate, 1),
+        "spike_detected": error_rate > 20.0,
+        "most_common_error": (most_common[0][0] if most_common else "")[:300],
+        "earliest_error_ts": min(e["timestamp"] for e in errors) if errors else None,
+        "implicated_loggers": list({e.get("logger", "") for e in errors if e.get("logger")}),
+    }
+
+
+def _live_get_trace(trace_id: str) -> dict:
+    with httpx.Client(timeout=15) as client:
+        docs = _es_query(client, {"term": {"trace_id": trace_id}}, size=100)
+
+    errors = [d for d in docs if d.get("level") in ("ERROR", "FATAL")]
+    return {
+        "trace_id": trace_id,
+        "spans": [_safe(d) for d in docs],
+        "services_involved": list({d.get("service", "") for d in docs}),
+        "has_errors": bool(errors),
+        "error_summary": " | ".join(e.get("message", "") for e in errors) or None,
+    }
+
+
+# ── Tools ─────────────────────────────────────────────────────────────────────
 
 @mcp.tool()
 def query_logs(
@@ -66,38 +227,9 @@ def query_logs(
         List of matching log entries, sorted oldest-first. Each entry includes
         timestamp, level, trace_id, logger, message, and optional stack_trace.
     """
-    severity = severity.upper()
-    level_rank = {"INFO": 0, "WARN": 1, "ERROR": 2, "FATAL": 3}
-    min_rank = level_rank.get(severity, 2)
-
-    all_logs = _load_logs()
-
-    # Determine reference time from the latest log entry (seed-safe)
-    timestamps = [_parse_ts(e["timestamp"]) for e in all_logs]
-    ref_time = max(timestamps)
-    cutoff = ref_time.replace(tzinfo=timezone.utc) - __import__("datetime").timedelta(hours=time_range_hours)
-    ref_time_tz = ref_time.replace(tzinfo=timezone.utc)
-
-    # In mock mode the seed only contains one service name; treat all entries as
-    # belonging to the requested service so non-payment-svc scenarios get data.
-    mock_mode = LOGS_MODE == "mock"
-    results = []
-    for entry in all_logs:
-        if not mock_mode and entry.get("service") != service:
-            continue
-        entry_ts = _parse_ts(entry["timestamp"])
-        if entry_ts < cutoff:
-            continue
-        entry_rank = level_rank.get(entry.get("level", "INFO"), 0)
-        if entry_rank < min_rank:
-            continue
-        # Strip host and truncate long messages to keep context manageable
-        safe_entry = {k: v for k, v in entry.items() if k != "host"}
-        if "message" in safe_entry:
-            safe_entry["message"] = safe_entry["message"][:300]
-        results.append(safe_entry)
-
-    return sorted(results, key=lambda e: e["timestamp"])[:15]
+    if LOGS_MODE == "live":
+        return _live_query_logs(service, severity.upper(), time_range_hours)
+    return _mock_query_logs(service, severity.upper(), time_range_hours)
 
 
 @mcp.tool()
@@ -124,40 +256,9 @@ def get_error_spike(
           - earliest_error_ts: str  — ISO timestamp of first error
           - implicated_loggers: list[str]
     """
-    all_logs = _load_logs()
-    timestamps = [_parse_ts(e["timestamp"]) for e in all_logs]
-    ref_time = max(timestamps).replace(tzinfo=timezone.utc)
-    cutoff = ref_time - __import__("datetime").timedelta(minutes=window_minutes)
-
-    mock_mode = LOGS_MODE == "mock"
-    window_logs = [
-        e for e in all_logs
-        if (mock_mode or e.get("service") == service) and _parse_ts(e["timestamp"]) >= cutoff
-    ]
-
-    errors = [e for e in window_logs if e.get("level") in ("ERROR", "FATAL", "WARN")]
-    error_rate = (len(errors) / len(window_logs) * 100) if window_logs else 0.0
-
-    messages = [e.get("message", "") for e in errors]
-    most_common = Counter(messages).most_common(1)[0][0] if messages else ""
-
-    loggers = list({e.get("logger", "") for e in errors if e.get("logger")})
-
-    earliest_error_ts = (
-        min(e["timestamp"] for e in errors) if errors else None
-    )
-
-    return {
-        "service": service,
-        "window_minutes": window_minutes,
-        "error_count": len(errors),
-        "total_count": len(window_logs),
-        "error_rate_pct": round(error_rate, 1),
-        "spike_detected": error_rate > 20.0,
-        "most_common_error": most_common[:300],
-        "earliest_error_ts": earliest_error_ts,
-        "implicated_loggers": loggers,
-    }
+    if LOGS_MODE == "live":
+        return _live_error_spike(service, window_minutes)
+    return _mock_error_spike(service, window_minutes)
 
 
 @mcp.tool()
@@ -176,26 +277,9 @@ def get_trace(trace_id: str) -> dict[str, Any]:
           - has_errors: bool
           - error_summary: str — concatenated error messages if any
     """
-    all_logs = _load_logs()
-    spans = [
-        {k: v for k, v in e.items() if k != "host"}
-        for e in all_logs
-        if e.get("trace_id") == trace_id
-    ]
-    spans.sort(key=lambda e: e["timestamp"])
-
-    services = list({s.get("service", "") for s in spans})
-    errors = [s for s in spans if s.get("level") in ("ERROR", "FATAL")]
-    error_summary = " | ".join(e.get("message", "") for e in errors)
-
-    return {
-        "trace_id": trace_id,
-        "spans": spans,
-        "services_involved": services,
-        "has_errors": bool(errors),
-        "error_summary": error_summary or None,
-    }
-
+    if LOGS_MODE == "live":
+        return _live_get_trace(trace_id)
+    return _mock_get_trace(trace_id)
 
 
 if __name__ == "__main__":

@@ -101,13 +101,13 @@ def judge_postmortem(pm: PostMortem, scenario: Scenario) -> dict[str, float | st
             messages=[{"role": "user", "content": prompt}],
         )
         content = message.content[0].text.strip()
-            result = json.loads(content)
-            return {
-                "rca_correctness":   float(result.get("rca_correctness", 0.0)),
-                "evidence_relevance": float(result.get("evidence_relevance", 0.0)),
-                "reasoning_quality":  float(result.get("reasoning_quality", 0.0)),
-                "explanation":        str(result.get("explanation", "")),
-            }
+        result = json.loads(content)
+        return {
+            "rca_correctness":   float(result.get("rca_correctness", 0.0)),
+            "evidence_relevance": float(result.get("evidence_relevance", 0.0)),
+            "reasoning_quality":  float(result.get("reasoning_quality", 0.0)),
+            "explanation":        str(result.get("explanation", "")),
+        }
     except Exception as exc:
         print(f"[WARN] Judge failed for {scenario.id}: {exc}", file=sys.stderr)
         return {

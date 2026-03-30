@@ -25,7 +25,7 @@ from pathlib import Path
 # Allow running from project root or swarm/
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from autogen import AssistantAgent, GroupChat, GroupChatManager
+from autogen import AssistantAgent, GroupChat, GroupChatManager, UserProxyAgent
 from autogen.mcp import create_toolkit
 from autogen.mcp.mcp_client import MCPClientSessionManager, StdioConfig
 
@@ -88,6 +88,16 @@ async def run_incident_analysis(
                 github_toolkit = await create_toolkit(github_session)
                 jira_toolkit   = await create_toolkit(jira_session)
 
+                # Coordinator sends the brief; agents follow in round-robin order.
+                # This ensures DevOps investigates FIRST so SWE can use its
+                # IMPLICATED_LOGGERS output as commit search keywords.
+                coordinator = UserProxyAgent(
+                    name="Coordinator",
+                    human_input_mode="NEVER",
+                    code_execution_config=False,
+                    max_consecutive_auto_reply=0,  # speaks only once (the brief)
+                )
+
                 # Agents
                 devops_agent = AssistantAgent(
                     name="DevOps_Agent",
@@ -121,12 +131,12 @@ async def run_incident_analysis(
                     human_input_mode="NEVER",
                 )
 
-                # GroupChat
-                # "round_robin" ensures each agent gets a turn to speak.
-                # Termination is on the manager so it triggers the moment the
-                # Critic emits the ```json block.
+                # GroupChat — Coordinator sends the brief, then round_robin:
+                #   DevOps (logs) → SWE (commits) → PM (tickets) → Critic (synthesise)
+                # This ordering guarantees SWE has DevOps's IMPLICATED_LOGGERS
+                # available before it starts its commit search.
                 groupchat = GroupChat(
-                    agents=[devops_agent, swe_agent, pm_agent, critic_agent],
+                    agents=[coordinator, devops_agent, swe_agent, pm_agent, critic_agent],
                     messages=[],
                     max_round=30,
                     speaker_selection_method="round_robin",
@@ -138,16 +148,17 @@ async def run_incident_analysis(
                     is_termination_msg=_is_postmortem_json,
                 )
 
-                await devops_agent.a_initiate_chat(
+                await coordinator.a_initiate_chat(
                     chat_manager,
                     message=incident_brief,
                     silent=False,
                 )
 
-                # Self-correction pass: if the Critic produced a JSON block but it
-                # has empty evidence.commits or evidence.logs, ask it to fix that.
+                # Self-correction pass: if the Critic produced a non-inconclusive JSON but
+                # is missing evidence.commits or evidence.logs, ask it to fix that.
+                # Skip self-correction when inconclusive=True — empty commits/tickets is correct then.
                 pm = _extract_postmortem(groupchat.messages)
-                if pm is not None and (not pm.evidence.commits or not pm.evidence.logs):
+                if pm is not None and not pm.inconclusive and (not pm.evidence.commits or not pm.evidence.logs):
                     await devops_agent.a_initiate_chat(
                         chat_manager,
                         message=CRITIC_SELF_CORRECT_PROMPT.format(

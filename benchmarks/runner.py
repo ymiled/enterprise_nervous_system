@@ -54,6 +54,9 @@ async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
         "LOGS_SEED_FILE":    str(scenario.logs_seed),
         "COMMITS_SEED_FILE": str(scenario.commits_seed),
         "TICKETS_SEED_FILE": str(scenario.tickets_seed),
+        "GITHUB_MODE":       scenario.github_mode,
+        "JIRA_MODE":         scenario.jira_mode,
+        "LOGS_MODE":         scenario.logs_mode,
     }
 
     try:
@@ -85,11 +88,7 @@ def _fmt(v: float) -> str:
     return f"{v:.2f}"
 
 
-def render_table(
-    results: list[EvalResult],
-    console: Console,
-    manual_baseline_seconds: float | None = None,
-) -> None:
+def render_table(results: list[EvalResult], console: Console) -> None:
     table = Table(
         title="Enterprise Nervous System — Benchmark Results",
         box=box.ROUNDED,
@@ -124,7 +123,7 @@ def render_table(
         )
 
     console.print(table)
-    _render_summary(results, console, manual_baseline_seconds=manual_baseline_seconds)
+    _render_summary(results, console)
 
 
 def _render_summary(
@@ -141,34 +140,20 @@ def _render_summary(
 
     median_s = median(times) if times else 0.0
 
-    def improvement() -> str:
-        if not manual_baseline_seconds:
-            return "n/a"
-        pct = (manual_baseline_seconds - median_s) / manual_baseline_seconds * 100
-        return f"[green]↓{pct:.0f}%[/green]" if pct > 0 else "—"
-
-    baseline_label = (
-        f"{manual_baseline_seconds:.1f}s"
-        if manual_baseline_seconds
-        else "n/a"
-    )
-
     summary = Table(title="Summary", box=box.SIMPLE, header_style="bold magenta")
-    summary.add_column("Metric",      style="bold")
-    summary.add_column("Value",       justify="right")
-    summary.add_column("Baseline",    justify="right", style="dim")
-    summary.add_column("vs Baseline", justify="right")
+    summary.add_column("Metric", style="bold")
+    summary.add_column("Value",  justify="right")
 
-    summary.add_row("Scenarios run",       str(n),                    "—",         "—")
-    summary.add_row("Completed",           f"{len(completed)}/{n}",   "—",         "—")
-    summary.add_row("Median time-to-RCA",  f"{median_s:.1f}s",        baseline_label, improvement())
-    summary.add_row("RCA accuracy",        avg("rca_accuracy"),        "—",    "—")
-    summary.add_row("Evidence quality",    avg("evidence_quality"),    "—",    "—")
-    summary.add_row("Actionability",       avg("actionability"),       "—",    "—")
-    summary.add_row("PII compliance",      avg("pii_compliance"),      "100%", "✓")
-    summary.add_row("Citation integrity",  avg("citation_integrity"),  "—",    "—")
-    summary.add_row("Reasoning quality",   avg("reasoning_quality"),   "—",    "—")
-    summary.add_row("Overall score",       avg("overall_score"),       "—",    "—")
+    summary.add_row("Scenarios run",      str(n))
+    summary.add_row("Completed",          f"{len(completed)}/{n}")
+    summary.add_row("Median time-to-RCA", f"{median_s:.1f}s")
+    summary.add_row("RCA accuracy",       avg("rca_accuracy"))
+    summary.add_row("Evidence quality",   avg("evidence_quality"))
+    summary.add_row("Actionability",      avg("actionability"))
+    summary.add_row("PII compliance",     avg("pii_compliance"))
+    summary.add_row("Citation integrity", avg("citation_integrity"))
+    summary.add_row("Reasoning quality",  avg("reasoning_quality"))
+    summary.add_row("Overall score",      avg("overall_score"))
 
     console.print(summary)
 
@@ -196,16 +181,12 @@ def save_results(results: list[EvalResult], path: Path) -> None:
         for r in results
     ]
     path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    Console().print(f"\n[green]Results saved →[/green] {path}")
+    Console().print(f"\n[green]Results saved ->[/green] {path}")
 
 
 # Entry point
 
-def main(
-    scenario_ids: list[str],
-    output: Path | None,
-    manual_baseline_seconds: float | None,
-) -> None:
+def main(scenario_ids: list[str], output: Path | None) -> None:
     """
     Run each scenario in its own asyncio.run() call so that anyio cancel-scope
     teardown from one MCP stdio session cannot leak into the next scenario's
@@ -263,7 +244,7 @@ def main(
     save_results(results, out_path)
 
     console.print()
-    render_table(results, console, manual_baseline_seconds=manual_baseline_seconds)
+    render_table(results, console)
 
 
 if __name__ == "__main__":
@@ -272,19 +253,6 @@ if __name__ == "__main__":
                         help="Scenario IDs to run (default: all 12)")
     parser.add_argument("--output", type=Path, default=None,
                         help="Path to save results JSON")
-    parser.add_argument(
-        "--manual-baseline-seconds",
-        type=float,
-        default=None,
-        help=(
-            "Observed/manual median triage time in seconds. "
-            "Use only measured data; no default assumption is applied."
-        ),
-    )
     args = parser.parse_args()
 
-    main(
-        scenario_ids=args.ids,
-        output=args.output,
-        manual_baseline_seconds=args.manual_baseline_seconds,
-    )
+    main(scenario_ids=args.ids, output=args.output)

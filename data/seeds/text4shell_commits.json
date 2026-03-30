@@ -1,0 +1,67 @@
+[
+  {
+    "sha": "b9b40b903e2d1f9935039803c9852439576780ea",
+    "sha_short": "b9b40b90",
+    "message": "Make default string lookups configurable via system property. Remove dns, url, and script lookups from defaults. (#341)",
+    "author": "apache-commons-team",
+    "date": "2022-09-23T16:16:27Z",
+    "files_changed": [
+      "src/changes/changes.xml",
+      "src/main/java/org/apache/commons/text/StringSubstitutor.java",
+      "src/main/java/org/apache/commons/text/lookup/DefaultStringLookup.java",
+      "src/main/java/org/apache/commons/text/lookup/InterpolatorStringLookup.java",
+      "src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java",
+      "src/main/resources/org/apache/commons/text/lookup/defaults.properties",
+      "src/site/xdoc/userguide.xml",
+      "src/test/java/org/apache/commons/text/StringSubstitutorWithInterpolatorStringLookupTest.java",
+      "src/test/java/org/apache/commons/text/lookup/StringLookupFactoryTest.java",
+      "src/test/resources/org/apache/commons/text/lookup/defaults.properties"
+    ],
+    "diff": "src/changes/changes.xml: @@ -71,15 +71,14 @@ The <action> type attribute can be add,update,fix,remove.\n     <action issue=\"TEXT-209\" type=\"fix\" dev=\"ggregory\" due-to=\"Arturo Bernal\">Use Math.min() call instead of doing it manually. #335.</action>\n     <action                  type=\"fix\" dev=\"ggregory\" due-to=\"ValentijnvdBeek, Gary Gregory\">TextStringBuilder: Throw OutOfMemoryError instead of NegativeArraySizeException.</action>\n     <action                  type=\"fix\" dev=\"ggregory\" due-to=\"ValentijnvdBeek, Gary Gregory\nsrc/main/java/org/apache/commons/text/StringSubstitutor.java: @@ -141,26 +141,28 @@\n  *\n  * <pre>\n  * final StringSubstitutor interpolator = StringSubstitutor.createInterpolator();\n- * interpolator.setEnableSubstitutionInVariables(true); // Allows for nested $'s.\n- * final String text = interpolator.replace(\"Base64 Decoder:        ${base64Decoder:SGVsbG9Xb3JsZCE=}\\n\"\n+ * final String text = interpolator.replace(\n+ *       \"Base64 Decoder:        ${base64Decoder:SGVsbG9Xb3JsZCE=}\\n\"\n  *     + \"Base64 Encoder:        ${base64Encoder:HelloWorld!}\\n\"\n  *     +\nsrc/main/java/org/apache/commons/text/lookup/DefaultStringLookup.java: @@ -16,13 +16,16 @@\n  */\n package org.apache.commons.text.lookup;\n \n-import java.util.stream.Stream;\n-\n /**\n  * An enumeration defining {@link StringLookup} objects available through {@link StringLookupFactory}.\n  * <p>\n  * This enum was adapted and expanded from Apache Commons Configuration 2.4.\n  * </p>\n+ * <p><strong>NOTE:</strong> Starting in version 1.10.0, not all lookups defined in this class are\n+ * included by default in the\n+ * {@link StringLookupFactory#addDefaultStringLookups(java.ut",
+    "url": "https://github.com/apache/commons-text/commit/b9b40b903e2d1f9935039803c9852439576780ea",
+    "body": "CVE-2022-42889 fix: Remove ScriptStringLookup, DnsStringLookup, and UrlStringLookup from the default interpolation set in StringLookupFactory. StringSubstitutor.createInterpolator() no longer enables dangerous lookups by default. This mitigates RCE via ${script:...}, SSRF via ${dns:...}/${url:...}."
+  },
+  {
+    "sha": "f0ba80ba392346bf3d18adefd23b502ad30fd7cb",
+    "sha_short": "f0ba80ba3923",
+    "message": "Internal refactoring",
+    "author": "Gary Gregory",
+    "date": "2022-06-02T10:34:40Z",
+    "files_changed": [
+      "src/main/java/org/apache/commons/text/lookup/FunctionStringLookup.java",
+      "src/main/java/org/apache/commons/text/lookup/InterpolatorStringLookup.java",
+      "src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java"
+    ],
+    "diff": "--- src/main/java/org/apache/commons/text/lookup/FunctionStringLookup.java\n@@ -16,7 +16,6 @@\n  */\n package org.apache.commons.text.lookup;\n \n-import java.util.Collections;\n import java.util.Map;\n import java.util.Objects;\n import java.util.function.Function;\n@@ -49,7 +48,7 @@ static <R> FunctionStringLookup<R> on(final Function<String, R> function) {\n      * @return a new instance backed by the given map.\n      */\n     static <V> FunctionStringLookup<V> on(final Map<String, V> map) {\n-        return on((map == null ? Collections.<String, V>emptyMap() : map)::get);\n+        return on(StringLookupFactory.toMap(map)::get);\n     }\n \n     /**\n\n--- src/main/java/org/apache/commons/text/lookup/InterpolatorStringLookup.java\n@@ -16,6 +16,7 @@\n  */\n package org.apache.commons.text.lookup;\n \n+import java.util.Collections;\n import java.util.HashMap;\n import java.util.Locale;\n import java.util.Map;\n@@ -88,7 +89,7 @@ static String toKey(final String key) {\n      * @param defaultMap the default map for string lookups.\n      */\n     <V> InterpolatorStringLookup(final Map<String, V> defaultMap) {\n-        this(StringLookupFactory.INSTANCE.mapStringLookup(defaultMap == null ? new HashMap<>() : defaultMap));\n+        this(StringLookupFactory.INSTANCE.mapStringLookup(defaultMap));\n     }\n \n     /**\n@@ -97,7 +98,7 @@ <V> InterpolatorStringLookup(final Map<String, V> defaultMap) {\n      * @param defaultStringLookup the default lookup.\n      */\n     InterpolatorStringLookup(final StringLookup defaultStringLookup) {\n-       \n\n--- src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java\n@@ -22,6 +22,7 @@\n import java.io.UncheckedIOException;\n import java.nio.charset.StandardCharsets;\n import java.util.Base64;\n+import java.util.Collections;\n import java.util.Map;\n import java.util.Objects;\n import java.util.Properties;\n@@ -416,6 +417,18 @@ private static Properties loadProperties() {\n         return properties;\n     }\n \n+    /**\n+     * Returns the given map if the input is non-null or an empty immutable map if the input is null.\n+     *\n+     * @param <K> the class of the map keys\n+     * @param <V> the class of the map values\n+     * @param map The map to test\n+     * @return the given map if the input is non-null or an empty immutable map if the input is null.\n+     */\n+    static <K, V> Map<K, V> toMap(final Map<K, V> map) {\n+        return map == null ? Collections.em",
+    "url": "https://github.com/apache/commons-text/commit/f0ba80ba392346bf3d18adefd23b502ad30fd7cb"
+  },
+  {
+    "sha": "9323ea8c20569b34eeb0bd5c2260f602e4af5e3f",
+    "sha_short": "9323ea8c2056",
+    "message": "Sort members",
+    "author": "Gary Gregory",
+    "date": "2022-09-24T13:36:55Z",
+    "files_changed": [
+      "src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java",
+      "src/main/java/org/apache/commons/text/similarity/IntersectionSimilarity.java",
+      "src/test/java/org/apache/commons/text/StringSubstitutorWithInterpolatorStringLookupTest.java",
+      "src/test/java/org/apache/commons/text/lookup/StringLookupFactoryTest.java"
+    ],
+    "diff": "--- src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java\n@@ -205,6 +205,103 @@\n  */\n public final class StringLookupFactory {\n \n+    /**\n+     * Internal class used to construct the default {@link StringLookup} map used by\n+     * {@link StringLookupFactory#addDefaultStringLookups(Map)}.\n+     */\n+    static final class DefaultStringLookupsHolder {\n+\n+        /** Singleton instance, initialized with the system properties. */\n+        static final DefaultStringLookupsHolder INSTANCE = new DefaultStringLookupsHolder(System.getProperties());\n+\n+        /**\n+         * Add the key and string lookup from {@code lookup} to {@code map}, also adding any additional\n+         * key aliases if needed. Keys are normalized using the {@link #toKey(String)} method.\n+         * @param lookup lookup to add\n+         * @param map map to add to\n+         */\n+     \n\n--- src/main/java/org/apache/commons/text/similarity/IntersectionSimilarity.java\n@@ -45,12 +45,12 @@ private static final class BagCount {\n         /** Private, mutable but must be used as immutable. */\n         private static final BagCount ZERO = new BagCount();\n \n+        /** The count. */\n+        int count;\n+\n         private BagCount() {\n             this.count = 0;\n         }\n-\n-        /** The count. */\n-        int count;\n     }\n \n     // The following is adapted from commons-collections for a Bag.\n\n--- src/test/java/org/apache/commons/text/StringSubstitutorWithInterpolatorStringLookupTest.java\n@@ -32,6 +32,15 @@\n \n public class StringSubstitutorWithInterpolatorStringLookupTest {\n \n+    private static StringLookup createInterpolatorWithLookups(final DefaultStringLookup... lookups) {\n+        final Map<String, StringLookup> lookupMap = new HashMap<>();\n+        for (final DefaultStringLookup lookup : lookups) {\n+            lookupMap.put(lookup.getKey().toLowerCase(), lookup.getStringLookup());\n+        }\n+\n+        return StringLookupFactory.INSTANCE.interpolatorStringLookup(lookupMap, null, false);\n+    }\n+\n     @Test\n     public void testCustomFunctionWithDefaults() {\n         testCustomFunctionWithDefaults(true);\n@@ -86,7 +95,6 @@ private void testCustomMapWithDefaults(final boolean addDefaultLookups) {\n     public void testCustomMapWithoutDefaults() {\n         testCustomMapWi\n\n--- src/test/java/org/apache/commons/text/lookup/StringLookupFactoryTest.java\n@@ -50,6 +50,42 @@ public static void assertDefaultKeys(final Map<String, StringLookup> stringLooku\n                 StringLookupFactory.KEY_XML);\n     }\n \n+    private static void assertMappedLookups(final Map<String, StringLookup> lookupMap, final String... keys) {\n+        final Set<String> remainingKeys = new HashSet<>(lookupMap.keySet());\n+\n+        for (final String key : keys) {\n+            final String normalizedKey = StringLookupFactory.toKey(key);\n+            Assertions.assertNotNull(normalizedKey, () -> \"Expected map to contain string lookup for key \" + key);\n+\n+            remainingKeys.remove(normalizedKey);\n+        }\n+\n+        Assertions.assertTrue(remainingKeys.isEmpty(), () -> \"Unexpected keys in lookup map: \" + remainingKeys);\n+    }\n+\n+    private static void checkDef",
+    "url": "https://github.com/apache/commons-text/commit/9323ea8c20569b34eeb0bd5c2260f602e4af5e3f"
+  },
+  {
+    "sha": "033ab51792fe058c9f52ba37872c007f1598ede3",
+    "sha_short": "033ab51792fe",
+    "message": "Javadoc since tags",
+    "author": "Gary Gregory",
+    "date": "2022-09-24T14:29:01Z",
+    "files_changed": [
+      "src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java",
+      "src/main/java/org/apache/commons/text/numbers/package-info.java",
+      "src/main/java/org/apache/commons/text/similarity/LongestCommonSubsequence.java"
+    ],
+    "diff": "--- src/main/java/org/apache/commons/text/lookup/StringLookupFactory.java\n@@ -512,10 +512,9 @@ Map<String, StringLookup> getDefaultStringLookups() {\n      * in cases where the set of default lookups must be modified. (See the class documentation\n      * for details.)\n      *\n-     * @since 1.10\n+     * @since 1.10.0\n      */\n-    public static final String DEFAULT_STRING_LOOKUPS_PROPERTY =\n-            \"org.apache.commons.text.lookup.StringLookupFactory.defaultStringLookups\";\n+    public static final String DEFAULT_STRING_LOOKUPS_PROPERTY = \"org.apache.commons.text.lookup.StringLookupFactory.defaultStringLookups\";\n \n     /**\n      * Clears any static resources.\n\n--- src/main/java/org/apache/commons/text/numbers/package-info.java\n@@ -19,6 +19,6 @@\n  * Provides algorithms for converting numbers to strings.\n  * </p>\n  *\n- * @since 1.10\n+ * @since 1.10.0\n  */\n package org.apache.commons.text.numbers;\n\n--- src/main/java/org/apache/commons/text/similarity/LongestCommonSubsequence.java\n@@ -60,7 +60,7 @@ public class LongestCommonSubsequence implements SimilarityScore<Integer> {\n      * @param left first input sequence.\n      * @param right second input sequence.\n      * @return last row of the dynamic-programming (DP) table for calculating the LCS of <code>left</code> and <code>right</code>\n-     * @since 1.10\n+     * @since 1.10.0\n      */\n     private static int[] algorithmB(final CharSequence left, final CharSequence right) {\n         final int m = left.length();\n@@ -102,7 +102,7 @@ private static int[] algorithmB(final CharSequence left, final CharSequence righ\n      * @param left first input sequence.\n      * @param right second input sequence.\n      * @return the LCS of <code>left</code> and <code>right</code>\n-     * @since 1.10\n+     * @since 1.10.0\n      */\n    ",
+    "url": "https://github.com/apache/commons-text/commit/033ab51792fe058c9f52ba37872c007f1598ede3"
+  }
+]

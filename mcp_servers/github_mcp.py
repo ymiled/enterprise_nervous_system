@@ -130,6 +130,7 @@ def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[
             c.get("message", ""),
             c.get("body", ""),
             " ".join(c.get("files_changed", [])),
+            c.get("diff", "")[:2000],  # also search diff content
         ]).lower()
         if kw in searchable:
             results.append(_slim(_scrub_author(c)))

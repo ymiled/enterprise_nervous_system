@@ -8,7 +8,7 @@ Seed files must be generated first:
     uv run python data/loaders/log4shell_fetcher.py --token ghp_...
 
 Usage:
-    # Run all 12 scenarios
+    # Run all 21 scenarios
     uv run python benchmarks/runner.py
 
     # Run specific IDs

@@ -110,7 +110,8 @@ _See benchmarks/results/run_latest.json for full details and per-scenario notes.
 The benchmark evaluates the swarm on **21 scenarios** across 
 
 
-### Evaluation Metrics (6 dimensions)
+
+### Evaluation Metrics (7 dimensions)
 
 | Metric | What it measures | Full credit |
 |---|---|---|
@@ -120,8 +121,9 @@ The benchmark evaluates the swarm on **21 scenarios** across
 | **Reliability** | Swarm completed without crash | Run did not raise an exception |
 | **PII compliance** | No emails or usernames in output | Zero regex matches on PII patterns |
 | **Citation integrity** | Evidence traceable to source | Log entry + ticket + logger keyword cited |
+| **Reasoning quality** | Causal chain is logically sound | LLM judge: high-quality reasoning |
 
-Overall score = `mean(6 metrics)`.
+Overall score = `mean(7 metrics)`.
 
 ### Running benchmarks
 

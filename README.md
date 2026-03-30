@@ -52,10 +52,11 @@ An autonomous root-cause analysis system that queries GitHub, Jira, and applicat
 
 ## Quickstart
 
+
 **1. Install dependencies**
 ```bash
 uv sync          # installs all runtime deps into .venv automatically
-uv sync --extra dev  # also installs pytest
+uv sync --extra dev  # also installs pytest (optional, for development/testing)
 ```
 
 **2. Configure environment**
@@ -64,7 +65,7 @@ cp .env.example .env
 # Edit .env — at minimum set ANTHROPIC_API_KEY
 ```
 
-**3. Inspect MCP servers interactively (MCP Inspector UI)**
+**3. Inspect MCP servers interactively** (optional, for manual exploration/debugging)
 ```bash
 # Opens a browser-based playground to call tools manually and see raw responses
 uv run fastmcp dev inspector mcp_servers/logs_mcp.py
@@ -73,20 +74,14 @@ uv run fastmcp dev inspector mcp_servers/jira_mcp.py
 ```
 Navigate to `http://localhost:5173` — you can invoke any tool and inspect the JSON output before wiring agents.
 
-**4. Run each MCP server as a standalone stdio process**
+**4. Run each MCP server as a standalone stdio process** (optional, for manual testing or connecting external MCP clients)
 ```bash
-# Useful for manual testing or connecting external MCP clients
 uv run python mcp_servers/logs_mcp.py
 uv run python mcp_servers/github_mcp.py
 uv run python mcp_servers/jira_mcp.py
 ```
 
-**5. Run the MCP unit tests**
-```bash
-uv run pytest tests/test_mcp_servers.py -v
-```
-
-**6. Run the full swarm against the Log4Shell scenario**
+**5. Run the full swarm against the Log4Shell scenario**
 ```bash
 uv run python swarm/orchestrator.py
 # with explicit args:
@@ -99,11 +94,20 @@ uv run python swarm/orchestrator.py --output postmortem.json
 
 ## Benchmark Suite
 
-The benchmark evaluates the swarm on **12 scenarios** across two tiers:
+The benchmark evaluates the swarm on 21 scenarios across Log4Shell, Text4Shell, and negative-control incident types, covering a range of services, severities, and root-cause complexities
 
+### Benchmark results
 
-### Real labeled datasets (12 scenarios, download required)
-Ground truth from publicly available HPC cluster logs with anomaly labels.
+| Group        | Median Overall Score | Median Time (s) |
+|--------------|----------------------|-----------------|
+| Log4Shell    | 0.748                | 19.4            |
+| Text4Shell   | 0.905                | 17.25           |
+| Negative     | 0.81                 | 21.9            |
+| All Scenarios| 0.81                 | 18.55           |
+
+_See benchmarks/results/run_latest.json for full details and per-scenario notes._
+
+The benchmark evaluates the swarm on **21 scenarios** across 
 
 
 ### Evaluation Metrics (6 dimensions)

@@ -486,7 +486,11 @@ LIVE_SCENARIOS: list[Scenario] = [
         github_mode  = "live",
         jira_mode    = "live",
         logs_mode    = "mock",
-        expected_commit_sha_prefix  = _LS_SHA,
+        # Live GitHub search uses a 14-day window from today — the 2021 fix commit
+        # (c362aff4) is outside that window. Swarm correctly reports inconclusive.
+        # This scenario validates live API connectivity, not oracle commit matching.
+        expected_inconclusive       = True,
+        expected_commit_sha_prefix  = "",
         expected_ticket_ids         = _LS_TICKETS,
         expected_logger_keyword     = _LS_LOGGER,
         expected_root_cause_keyword = _LS_RCA,

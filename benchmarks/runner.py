@@ -50,6 +50,9 @@ async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
     """Single attempt — no sleeps. Retry logic lives in main() using time.sleep()."""
     from swarm.orchestrator import run_incident_analysis
 
+    import os
+    from config.settings import GITHUB_TOKEN, GITHUB_ORG, GROQ_API_KEY, JIRA_TOKEN, JIRA_EMAIL
+
     seed_overrides = {
         "LOGS_SEED_FILE":    str(scenario.logs_seed),
         "COMMITS_SEED_FILE": str(scenario.commits_seed),
@@ -57,7 +60,15 @@ async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
         "GITHUB_MODE":       scenario.github_mode,
         "JIRA_MODE":         scenario.jira_mode,
         "LOGS_MODE":         scenario.logs_mode,
+        # Pass credentials so MCP subprocesses have them regardless of env inheritance
+        "GITHUB_ORG":        os.environ.get("GITHUB_ORG", GITHUB_ORG),
+        "GITHUB_TOKEN":      GITHUB_TOKEN,
+        "GROQ_API_KEY":      GROQ_API_KEY,
     }
+    if JIRA_TOKEN:
+        seed_overrides["JIRA_TOKEN"] = JIRA_TOKEN
+    if JIRA_EMAIL:
+        seed_overrides["JIRA_EMAIL"] = JIRA_EMAIL
 
     try:
         pm, usage = await run_incident_analysis(

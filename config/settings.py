@@ -10,6 +10,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
 SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
+API_KEY: str = os.getenv("API_KEY", "")  # If set, required on X-API-Key header for POST /analyze
 
 # MCP server modes
 GITHUB_MODE: str = os.getenv("GITHUB_MODE", "mock")

@@ -33,6 +33,7 @@ from config.settings import (
     DEFAULT_INCIDENT_SEVERITY,
     DEFAULT_INCIDENT_SERVICE,
     DEFAULT_INCIDENT_TIME,
+    GITHUB_ORG,
     LLM_CONFIG,
 )
 from agents.prompts import CRITIC_PROMPT, CRITIC_SELF_CORRECT_PROMPT, DEVOPS_PROMPT, PM_PROMPT, SWE_PROMPT
@@ -84,7 +85,7 @@ async def run_incident_analysis(
         f"Service:    {service}\n"
         f"Severity:   {severity}\n"
         f"Detected:   {incident_time}\n"
-        f"Repo:       company/{service}\n"
+        f"Repo:       {GITHUB_ORG}/{service}\n"
         f"Jira proj:  {jira_project}\n"
         f"{'=' * 40}\n\n"
         f"The service is throwing errors. All three specialists must investigate "

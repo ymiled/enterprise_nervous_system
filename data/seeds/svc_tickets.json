@@ -1,0 +1,22 @@
+[
+  {
+    "id": "SVC-401",
+    "title": "auth-svc 503 cascade — payment-svc authorization unavailable",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-06-01",
+    "description": "auth-svc deployment scaled to 0 pods at 16:00Z due to misconfigured HPA (minReplicas accidentally set to 0). payment-svc Feign client received 503/ConnectionRefused on all token validation calls. CircuitBreaker opened after 10 failures. All POST /v1/payments returned 503 for 8 minutes. Fix: restore auth-svc minReplicas=2.",
+    "url": "https://jira.company.com/browse/SVC-401",
+    "labels": ["dependency-failure", "auth-svc", "payment-svc", "ConnectionRefused", "production-incident"]
+  },
+  {
+    "id": "SVC-402",
+    "title": "Implement auth-svc fallback — allow cached token validation during outage",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-06-01",
+    "description": "payment-svc has no fallback when auth-svc is unavailable. Add short-lived JWT cache (TTL=60s) so recently validated tokens can be accepted during brief auth-svc outages. Also fix HPA minReplicas guard: add admission webhook rejecting minReplicas=0 for tier-1 services.",
+    "url": "https://jira.company.com/browse/SVC-402",
+    "labels": ["resilience", "auth-svc", "circuit-breaker"]
+  }
+]

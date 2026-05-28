@@ -31,6 +31,7 @@ from config.settings import (
     COMMITS_SEED_FILE,
     GITHUB_API_URL,
     GITHUB_MODE,
+    GITHUB_ORG,
     GITHUB_TOKEN,
 )
 
@@ -86,9 +87,10 @@ def _slim(c: dict) -> dict:
 
 def _mock_recent_commits(repo: str, hours_back: int) -> list[dict[str, Any]]:
     commits = _load_seed_commits()
+    if not commits:
+        return []
     ref_time = max(_commit_ts(c) for c in commits)
     cutoff = ref_time - timedelta(hours=hours_back)
-    # Mock data has no 'repo' field — return all commits within the time window
     filtered = [
         _slim(_scrub_author(c)) for c in commits
         if _commit_ts(c) >= cutoff
@@ -118,6 +120,8 @@ def _mock_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
 
 def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[str, Any]]:
     commits = _load_seed_commits()
+    if not commits:
+        return []
     kw = keyword.lower()
     ref_time = max(_commit_ts(c) for c in commits)
     cutoff = ref_time - timedelta(hours=hours_back)
@@ -223,7 +227,7 @@ def get_recent_commits(repo: str, hours_back: int = 48) -> list[dict[str, Any]]:
 
 
 @mcp.tool()
-def get_commit_diff(commit_sha: str, repo: str = "company/payment-svc") -> dict[str, Any]:
+def get_commit_diff(commit_sha: str, repo: str = f"{GITHUB_ORG}/payment-svc") -> dict[str, Any]:
     """
     Return the full diff metadata for a single commit.
 

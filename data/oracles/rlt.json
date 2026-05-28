@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for rate limit cascade incident type.",
+  "incident": "Rate limit cascade — Stripe 429s from unthrottled PaymentReconciliationJob",
+  "primary_fix_commit": {
+    "sha": "",
+    "sha_prefix_8": "",
+    "date": "",
+    "message": "No fix commit — missing rate limiter + exponential backoff in StripeGateway"
+  },
+  "ticket_ids": ["RLT-501", "RLT-502"],
+  "logger_keywords": ["com.stripe.exception.RateLimitException"],
+  "root_cause_keywords": ["rate limit", "429", "retry storm"]
+}

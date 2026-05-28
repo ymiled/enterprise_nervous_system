@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for upstream dependency failure / cascade incident type.",
+  "incident": "Dependency failure — auth-svc scaled to 0, cascading 503s to payment-svc",
+  "primary_fix_commit": {
+    "sha": "",
+    "sha_prefix_8": "",
+    "date": "",
+    "message": "No fix commit — HPA misconfiguration (minReplicas=0)"
+  },
+  "ticket_ids": ["SVC-401", "SVC-402"],
+  "logger_keywords": ["feign.FeignException"],
+  "root_cause_keywords": ["ConnectionRefused", "503", "auth-svc"]
+}

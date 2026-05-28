@@ -32,8 +32,11 @@ class EvalResult:
     pii_compliance:        float
     citation_integrity:    float
     reasoning_quality:     float   # judge: reasoning_quality
+    rca_keyword_match:     float   # deterministic: expected keyword in root_cause
     elapsed_seconds:       float
     postmortem_confidence: float = 0.0
+    estimated_tokens:      int   = 0
+    estimated_cost_usd:    float = 0.0
     notes:                 str   = ""
 
     @property
@@ -42,6 +45,15 @@ class EvalResult:
             (self.rca_accuracy + self.evidence_quality + self.actionability
              + self.reliability + self.pii_compliance + self.citation_integrity
              + self.reasoning_quality) / 7,
+            3,
+        )
+
+    @property
+    def deterministic_score(self) -> float:
+        """Score using only non-LLM metrics (no judge calls)."""
+        return round(
+            (self.rca_keyword_match + self.evidence_quality + self.actionability
+             + self.reliability + self.pii_compliance + self.citation_integrity) / 6,
             3,
         )
 
@@ -149,11 +161,30 @@ def reasoning_quality(judge_scores: dict) -> float:
     return round(float(judge_scores.get("reasoning_quality", 0.0)), 3)
 
 
+def rca_keyword_match(pm: PostMortem, scenario: Scenario) -> float:
+    """
+    Deterministic (no LLM): checks expected_root_cause_keyword appears in
+    root_cause or contributing_factors (case-insensitive).
+    For negative scenarios (keyword=""), checks pm.inconclusive==True instead.
+    """
+    kw = scenario.expected_root_cause_keyword.lower()
+    if not kw:
+        return 1.0 if pm.inconclusive else 0.0
+    full_text = (pm.root_cause + " " + " ".join(pm.contributing_factors)).lower()
+    return 1.0 if kw in full_text else 0.0
+
+
 # Entry points
 
-def evaluate(pm: PostMortem, scenario: Scenario, elapsed_seconds: float) -> EvalResult:
+def evaluate(
+    pm: PostMortem,
+    scenario: Scenario,
+    elapsed_seconds: float,
+    usage: dict | None = None,
+) -> EvalResult:
     from benchmarks.judge import judge_postmortem
     judge = judge_postmortem(pm, scenario)
+    usage = usage or {}
 
     return EvalResult(
         scenario_id=scenario.id,
@@ -165,8 +196,11 @@ def evaluate(pm: PostMortem, scenario: Scenario, elapsed_seconds: float) -> Eval
         pii_compliance=pii_compliance(pm),
         citation_integrity=citation_integrity(pm, scenario),
         reasoning_quality=reasoning_quality(judge),
+        rca_keyword_match=rca_keyword_match(pm, scenario),
         elapsed_seconds=round(elapsed_seconds, 1),
         postmortem_confidence=pm.confidence_score,
+        estimated_tokens=usage.get("estimated_tokens", 0),
+        estimated_cost_usd=usage.get("estimated_cost_usd", 0.0),
         notes=judge.get("explanation", ""),
     )
 
@@ -182,6 +216,7 @@ def failed_run(scenario: Scenario, elapsed_seconds: float, reason: str) -> EvalR
         pii_compliance=1.0,
         citation_integrity=0.0,
         reasoning_quality=0.0,
+        rca_keyword_match=0.0,
         elapsed_seconds=round(elapsed_seconds, 1),
         notes=reason,
     )

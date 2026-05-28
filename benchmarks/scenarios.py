@@ -26,6 +26,8 @@ _FETCH_CMDS = {
     "text4shell": "uv run python data/loaders/text4shell_fetcher.py --token ghp_...",
 }
 
+_HAND_CRAFTED = {"oom", "dep", "dbl", "svc", "rlt"}
+
 
 def _load_oracle(name: str) -> dict:
     path = ORACLES / f"{name}.json"
@@ -42,6 +44,11 @@ def _load_oracle(name: str) -> dict:
 
 _LS  = _load_oracle("log4shell")
 _T4S = _load_oracle("text4shell")
+_OOM = _load_oracle("oom")
+_DEP = _load_oracle("dep")
+_DBL = _load_oracle("dbl")
+_SVC = _load_oracle("svc")
+_RLT = _load_oracle("rlt")
 
 # Log4Shell
 _LS_SHA    : str       = _LS["primary_fix_commit"]["sha_prefix_8"]
@@ -54,6 +61,32 @@ _T4S_SHA    : str       = _T4S["primary_fix_commit"]["sha_prefix_8"]
 _T4S_TICKETS: list[str] = _T4S["ticket_ids"]
 _T4S_LOGGER : str       = _T4S["logger_keywords"][0] if _T4S["logger_keywords"] else "StringSubstitutor"
 _T4S_RCA    : str       = _T4S["root_cause_keywords"][0] if _T4S["root_cause_keywords"] else "interpolation"
+
+# OOM
+_OOM_TICKETS: list[str] = _OOM["ticket_ids"]
+_OOM_LOGGER : str       = _OOM["logger_keywords"][0]
+_OOM_RCA    : str       = _OOM["root_cause_keywords"][0]
+
+# Bad deploy
+_DEP_SHA    : str       = _DEP["primary_fix_commit"]["sha_prefix_8"]
+_DEP_TICKETS: list[str] = _DEP["ticket_ids"]
+_DEP_LOGGER : str       = _DEP["logger_keywords"][0]
+_DEP_RCA    : str       = _DEP["root_cause_keywords"][0]
+
+# DB deadlock
+_DBL_TICKETS: list[str] = _DBL["ticket_ids"]
+_DBL_LOGGER : str       = _DBL["logger_keywords"][0]
+_DBL_RCA    : str       = _DBL["root_cause_keywords"][0]
+
+# Dependency failure
+_SVC_TICKETS: list[str] = _SVC["ticket_ids"]
+_SVC_LOGGER : str       = _SVC["logger_keywords"][0]
+_SVC_RCA    : str       = _SVC["root_cause_keywords"][0]
+
+# Rate limit cascade
+_RLT_TICKETS: list[str] = _RLT["ticket_ids"]
+_RLT_LOGGER : str       = _RLT["logger_keywords"][0]
+_RLT_RCA    : str       = _RLT["root_cause_keywords"][0]
 
 
 # Dataclasses
@@ -81,6 +114,9 @@ class Scenario:
     github_mode: str = "live"
     jira_mode:   str = "live"
     logs_mode:   str = "mock"
+    # Human-verified gold label — root_cause must contain the keyword and cite the commit
+    human_verified: bool = False
+    human_notes:    str  = ""
 
 
 
@@ -103,7 +139,10 @@ LOG4SHELL_SCENARIOS: list[Scenario] = [
              service="payment-svc",      incident_time="2021-12-10T03:14:59Z", severity="P0",
              jira_project="LOG4J2",      expected_commit_sha_prefix=_LS_SHA,
              expected_ticket_ids=_LS_TICKETS,
-             expected_logger_keyword=_LS_LOGGER, expected_root_cause_keyword=_LS_RCA, **_LS_SEEDS),
+             expected_logger_keyword=_LS_LOGGER, expected_root_cause_keyword=_LS_RCA,
+             human_verified=True,
+             human_notes="root_cause must mention 'jndi' and commit c362aff4; tickets LOG4J2-3208",
+             **_LS_SEEDS),
 
     Scenario(id="ls-02", name="Log4Shell · payment-svc · P0 · LDAP callback observed",
              service="payment-svc",      incident_time="2021-12-10T04:00:00Z", severity="P0",
@@ -199,7 +238,10 @@ TEXT4SHELL_SCENARIOS: list[Scenario] = [
              service="template-svc",    incident_time="2022-10-27T08:15:00Z", severity="P0",
              jira_project="TEXT",       expected_commit_sha_prefix=_T4S_SHA,
              expected_ticket_ids=_T4S_TICKETS,
-             expected_logger_keyword=_T4S_LOGGER, expected_root_cause_keyword=_T4S_RCA, **_T4S_SEEDS),
+             expected_logger_keyword=_T4S_LOGGER, expected_root_cause_keyword=_T4S_RCA,
+             human_verified=True,
+             human_notes="root_cause must mention 'interpolation' and StringSubstitutor; ticket TEXT-191",
+             **_T4S_SEEDS),
 
     Scenario(id="t4s-02", name="Text4Shell · template-svc · P0 · DNS callback observed",
              service="template-svc",    incident_time="2022-10-27T08:16:00Z", severity="P0",
@@ -257,6 +299,8 @@ NEGATIVE_SCENARIOS: list[Scenario] = [
     Scenario(
         id="neg-01",
         name="Negative · commons-lang · no related commits or tickets",
+        human_verified=True,
+        human_notes="swarm must set inconclusive=True; root_cause must NOT fabricate JNDI/log4j",
         service="inventory-svc",
         incident_time="2021-06-15T10:00:00Z",
         severity="P2",
@@ -284,8 +328,179 @@ NEGATIVE_SCENARIOS: list[Scenario] = [
 ]
 
 
+# ── OOM / memory leak scenarios ───────────────────────────────────────────────
+
+_OOM_SEEDS = dict(
+    logs_seed    = SEEDS / "oom_logs.json",
+    commits_seed = SEEDS / "oom_commits.json",
+    tickets_seed = SEEDS / "oom_tickets.json",
+    github_mode  = "mock",
+    jira_mode    = "mock",
+    logs_mode    = "mock",
+)
+
+OOM_SCENARIOS: list[Scenario] = [
+    Scenario(id="oom-01", name="OOM · payment-svc · P0 · JVM heap exhausted / OOMKilled",
+             service="payment-svc", incident_time="2024-03-15T02:28:00Z", severity="P0",
+             jira_project="OOM", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_OOM_TICKETS,
+             expected_logger_keyword=_OOM_LOGGER, expected_root_cause_keyword=_OOM_RCA,
+             human_verified=True,
+             human_notes="infra incident — no code commit; swarm must set inconclusive=True; root_cause mentions OutOfMemoryError",
+             **_OOM_SEEDS),
+    Scenario(id="oom-02", name="OOM · payment-svc · P1 · repeated GC overhead / heap pressure",
+             service="payment-svc", incident_time="2024-03-15T03:00:00Z", severity="P1",
+             jira_project="OOM", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_OOM_TICKETS,
+             expected_logger_keyword=_OOM_LOGGER, expected_root_cause_keyword=_OOM_RCA,
+             **_OOM_SEEDS),
+]
+
+
+# ── Bad deploy / config drift scenarios ───────────────────────────────────────
+
+_DEP_SEEDS = dict(
+    logs_seed    = SEEDS / "dep_logs.json",
+    commits_seed = SEEDS / "dep_commits.json",
+    tickets_seed = SEEDS / "dep_tickets.json",
+    github_mode  = "mock",
+    jira_mode    = "mock",
+    logs_mode    = "mock",
+)
+
+DEP_SCENARIOS: list[Scenario] = [
+    Scenario(id="dep-01", name="BadDeploy · payment-svc · P0 · DB_HOST points to staging",
+             service="payment-svc", incident_time="2024-04-02T14:03:00Z", severity="P0",
+             jira_project="DEP",
+             expected_commit_sha_prefix=_DEP_SHA, expected_ticket_ids=_DEP_TICKETS,
+             expected_logger_keyword=_DEP_LOGGER, expected_root_cause_keyword=_DEP_RCA,
+             human_verified=True,
+             human_notes="root_cause must mention DB_HOST and commit a1b2c3d4; tickets DEP-201/202",
+             **_DEP_SEEDS),
+    Scenario(id="dep-02", name="BadDeploy · payment-svc · P1 · config drift post-deploy validation",
+             service="payment-svc", incident_time="2024-04-02T14:10:00Z", severity="P1",
+             jira_project="DEP",
+             expected_commit_sha_prefix=_DEP_SHA, expected_ticket_ids=_DEP_TICKETS,
+             expected_logger_keyword=_DEP_LOGGER, expected_root_cause_keyword=_DEP_RCA,
+             **_DEP_SEEDS),
+]
+
+
+# ── DB deadlock / connection pool exhaustion scenarios ────────────────────────
+
+_DBL_SEEDS = dict(
+    logs_seed    = SEEDS / "dbl_logs.json",
+    commits_seed = SEEDS / "dbl_commits.json",
+    tickets_seed = SEEDS / "dbl_tickets.json",
+    github_mode  = "mock",
+    jira_mode    = "mock",
+    logs_mode    = "mock",
+)
+
+DBL_SCENARIOS: list[Scenario] = [
+    Scenario(id="dbl-01", name="Deadlock · order-svc · P0 · HikariCP pool exhausted + deadlock",
+             service="order-svc", incident_time="2024-05-10T09:01:00Z", severity="P0",
+             jira_project="DBL", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_DBL_TICKETS,
+             expected_logger_keyword=_DBL_LOGGER, expected_root_cause_keyword=_DBL_RCA,
+             **_DBL_SEEDS),
+    Scenario(id="dbl-02", name="Deadlock · order-svc · P1 · connection leak + pool saturation",
+             service="order-svc", incident_time="2024-05-10T09:30:00Z", severity="P1",
+             jira_project="DBL", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_DBL_TICKETS,
+             expected_logger_keyword=_DBL_LOGGER, expected_root_cause_keyword=_DBL_RCA,
+             **_DBL_SEEDS),
+]
+
+
+# ── Dependency failure / cascade scenarios ────────────────────────────────────
+
+_SVC_SEEDS = dict(
+    logs_seed    = SEEDS / "svc_logs.json",
+    commits_seed = SEEDS / "svc_commits.json",
+    tickets_seed = SEEDS / "svc_tickets.json",
+    github_mode  = "mock",
+    jira_mode    = "mock",
+    logs_mode    = "mock",
+)
+
+SVC_SCENARIOS: list[Scenario] = [
+    Scenario(id="svc-01", name="DepFail · payment-svc · P0 · auth-svc 503 cascade",
+             service="payment-svc", incident_time="2024-06-01T16:00:00Z", severity="P0",
+             jira_project="SVC", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_SVC_TICKETS,
+             expected_logger_keyword=_SVC_LOGGER, expected_root_cause_keyword=_SVC_RCA,
+             **_SVC_SEEDS),
+    Scenario(id="svc-02", name="DepFail · payment-svc · P1 · circuit breaker open on auth-svc",
+             service="payment-svc", incident_time="2024-06-01T16:15:00Z", severity="P1",
+             jira_project="SVC", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_SVC_TICKETS,
+             expected_logger_keyword=_SVC_LOGGER, expected_root_cause_keyword=_SVC_RCA,
+             **_SVC_SEEDS),
+]
+
+
+# ── Rate limit cascade scenarios ──────────────────────────────────────────────
+
+_RLT_SEEDS = dict(
+    logs_seed    = SEEDS / "rlt_logs.json",
+    commits_seed = SEEDS / "rlt_commits.json",
+    tickets_seed = SEEDS / "rlt_tickets.json",
+    github_mode  = "mock",
+    jira_mode    = "mock",
+    logs_mode    = "mock",
+)
+
+RLT_SCENARIOS: list[Scenario] = [
+    Scenario(id="rlt-01", name="RateLimit · payment-svc · P0 · Stripe 429 retry storm",
+             service="payment-svc", incident_time="2024-07-20T11:00:00Z", severity="P0",
+             jira_project="RLT", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_RLT_TICKETS,
+             expected_logger_keyword=_RLT_LOGGER, expected_root_cause_keyword=_RLT_RCA,
+             **_RLT_SEEDS),
+    Scenario(id="rlt-02", name="RateLimit · payment-svc · P1 · Stripe quota exhaustion post-batch",
+             service="payment-svc", incident_time="2024-07-20T11:30:00Z", severity="P1",
+             jira_project="RLT", expected_inconclusive=True,
+             expected_commit_sha_prefix="", expected_ticket_ids=_RLT_TICKETS,
+             expected_logger_keyword=_RLT_LOGGER, expected_root_cause_keyword=_RLT_RCA,
+             **_RLT_SEEDS),
+]
+
+
+# ── Live integration scenario (real apache/logging-log4j2 + Apache JIRA) ──────
+#
+# Requires: GITHUB_TOKEN set, GITHUB_ORG=apache in .env
+# Run: uv run python benchmarks/runner.py --ids ls-live-01
+
+LIVE_SCENARIOS: list[Scenario] = [
+    Scenario(
+        id="ls-live-01",
+        name="Log4Shell · live · apache/logging-log4j2 · real GitHub + Jira",
+        service="logging-log4j2",
+        incident_time="2021-12-10T06:15:00Z",
+        severity="P0",
+        jira_project="LOG4J2",
+        logs_seed    = SEEDS / "log4shell_logs.json",
+        commits_seed = SEEDS / "log4shell_commits.json",
+        tickets_seed = SEEDS / "log4shell_tickets.json",
+        github_mode  = "live",
+        jira_mode    = "live",
+        logs_mode    = "mock",
+        expected_commit_sha_prefix  = _LS_SHA,
+        expected_ticket_ids         = _LS_TICKETS,
+        expected_logger_keyword     = _LS_LOGGER,
+        expected_root_cause_keyword = _LS_RCA,
+    ),
+]
+
+
 # Exports
 
-ALL_SCENARIOS: list[Scenario] = LOG4SHELL_SCENARIOS + TEXT4SHELL_SCENARIOS + NEGATIVE_SCENARIOS
+ALL_SCENARIOS: list[Scenario] = (
+    LOG4SHELL_SCENARIOS + TEXT4SHELL_SCENARIOS + NEGATIVE_SCENARIOS
+    + OOM_SCENARIOS + DEP_SCENARIOS + DBL_SCENARIOS + SVC_SCENARIOS + RLT_SCENARIOS
+)
 
-SCENARIO_MAP: dict[str, Scenario] = {s.id: s for s in ALL_SCENARIOS}
+ALL_SCENARIOS_WITH_LIVE: list[Scenario] = ALL_SCENARIOS + LIVE_SCENARIOS
+
+SCENARIO_MAP: dict[str, Scenario] = {s.id: s for s in ALL_SCENARIOS + LIVE_SCENARIOS}

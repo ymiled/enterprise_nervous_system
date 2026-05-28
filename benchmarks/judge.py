@@ -15,15 +15,15 @@ import json
 import sys
 from pathlib import Path
 
-import anthropic
+from openai import OpenAI
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from config.settings import ANTHROPIC_API_KEY
+from config.settings import GROQ_API_KEY
 from schemas.postmortem import PostMortem
 from benchmarks.scenarios import Scenario
 
-_MODEL  = "claude-opus-4-6"
-_CLIENT = anthropic.Anthropic(api_key=ANTHROPIC_API_KEY)
+_MODEL  = "llama-3.3-70b-versatile"
+_CLIENT = OpenAI(api_key=GROQ_API_KEY, base_url="https://api.groq.com/openai/v1")
 
 _PROMPT = """\
 You are evaluating an AI-generated incident post-mortem for correctness and quality.
@@ -94,13 +94,13 @@ def judge_postmortem(pm: PostMortem, scenario: Scenario) -> dict[str, float | st
     )
 
     try:
-        message = _CLIENT.messages.create(
+        message = _CLIENT.chat.completions.create(
             model=_MODEL,
             max_tokens=256,
             temperature=0.0,
             messages=[{"role": "user", "content": prompt}],
         )
-        content = message.content[0].text.strip()
+        content = message.choices[0].message.content.strip()
         result = json.loads(content)
         return {
             "rca_correctness":   float(result.get("rca_correctness", 0.0)),

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "svc-0001",
+    "timestamp": "2024-06-01T16:00:45Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-svc-0001",
+    "logger": "feign.FeignException",
+    "message": "feign.RetryableException: Connection refused executing GET http://auth-svc.internal/v1/validate — java.net.ConnectException: Connection refused",
+    "env": "production"
+  },
+  {
+    "id": "svc-0002",
+    "timestamp": "2024-06-01T16:00:46Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-svc-0002",
+    "logger": "feign.FeignException",
+    "message": "FeignException$ServiceUnavailable: [503] during [GET] to [http://auth-svc.internal/v1/validate]: auth-svc returned 503 Service Unavailable. Upstream pod count=0 (deployment scaled to 0).",
+    "env": "production"
+  },
+  {
+    "id": "svc-0003",
+    "timestamp": "2024-06-01T16:00:50Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-svc-0003",
+    "logger": "io.github.resilience4j.circuitbreaker.CircuitBreaker",
+    "message": "CircuitBreaker 'auth-svc' changed state from CLOSED to OPEN. Failure rate: 100% (10/10 calls failed in last 10s). auth-svc dependency unreachable.",
+    "env": "production"
+  },
+  {
+    "id": "svc-0004",
+    "timestamp": "2024-06-01T16:00:55Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-svc-0004",
+    "logger": "com.company.payment.service.PaymentService",
+    "message": "Payment authorization failed: AuthServiceException — token validation unavailable. Cascading 503 to all POST /v1/payments callers. auth-svc ConnectionRefused since 16:00:45Z.",
+    "env": "production"
+  },
+  {
+    "id": "svc-0005",
+    "timestamp": "2024-06-01T16:01:00Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-svc-0005",
+    "logger": "feign.FeignException",
+    "message": "Retry exhausted for auth-svc: 3/3 attempts failed with ConnectionRefused. Last attempt at 16:01:00Z. auth-svc pod health: 0/3 pods Ready in namespace auth.",
+    "env": "production"
+  },
+  {
+    "id": "svc-0006",
+    "timestamp": "2024-06-01T16:01:15Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-svc-0006",
+    "logger": "org.springframework.web.servlet.FrameworkServlet",
+    "message": "500 error: AuthServiceUnavailableException for request POST /v1/payments. Root cause: feign.FeignException$ServiceUnavailable from auth-svc. Error rate 100% since 16:00:45Z.",
+    "env": "production"
+  }
+]

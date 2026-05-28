@@ -1,0 +1,15 @@
+[
+  {
+    "sha": "a1b2c3d4e5f67890abcdef1234567890abcdef12",
+    "sha_short": "a1b2c3d4e5f6",
+    "message": "chore: update DB_HOST in production config\n\nUpdate DB_HOST to use new RDS endpoint.\nReviewed-by: platform-team",
+    "author": "deploy-bot",
+    "date": "2024-04-02T13:58:00Z",
+    "files_changed": [
+      "k8s/production/payment-svc/configmap.yaml",
+      "k8s/production/payment-svc/deployment.yaml"
+    ],
+    "diff": "--- k8s/production/payment-svc/configmap.yaml\n@@ -3,7 +3,7 @@\n   DB_HOST: db-prod.internal\n+  DB_HOST: db-staging.internal\n-  DB_HOST: db-prod.internal\n",
+    "url": "https://github.com/company/platform/commit/a1b2c3d4e5f67890abcdef1234567890abcdef12"
+  }
+]

@@ -60,7 +60,7 @@ async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
     }
 
     try:
-        pm = await run_incident_analysis(
+        pm, usage = await run_incident_analysis(
             service=scenario.service,
             incident_time=scenario.incident_time,
             severity=scenario.severity,
@@ -70,7 +70,7 @@ async def _run_scenario(scenario: Scenario, start: float) -> EvalResult:
         elapsed = time.monotonic() - start
         if pm is None:
             return failed_run(scenario, elapsed, "Swarm returned None — no JSON block from Critic")
-        return evaluate(pm, scenario, elapsed)
+        return evaluate(pm, scenario, elapsed, usage=usage)
     except Exception as exc:
         elapsed = time.monotonic() - start
         return failed_run(scenario, elapsed, str(exc)[:120])
@@ -96,8 +96,9 @@ def render_table(results: list[EvalResult], console: Console) -> None:
         header_style="bold cyan",
     )
     table.add_column("ID",            style="dim",     width=8)
-    table.add_column("Scenario",                       width=40)
+    table.add_column("Scenario",                       width=36)
     table.add_column("RCA\nAcc.",     justify="right", width=6)
+    table.add_column("KW\nMatch",     justify="right", width=6)
     table.add_column("Evid.\nQual.",  justify="right", width=6)
     table.add_column("Action\n-able", justify="right", width=7)
     table.add_column("Reli-\nable",   justify="right", width=6)
@@ -105,13 +106,16 @@ def render_table(results: list[EvalResult], console: Console) -> None:
     table.add_column("Cit.\nInteg.",  justify="right", width=6)
     table.add_column("Reason\n-ing",  justify="right", width=7)
     table.add_column("Score",         justify="right", width=6)
+    table.add_column("Det.\nScore",   justify="right", width=6)
+    table.add_column("Tok\n(est)",    justify="right", width=7)
     table.add_column("Time\n(s)",     justify="right", width=6)
 
     for r in results:
         table.add_row(
             r.scenario_id,
-            r.scenario_name[:40],
+            r.scenario_name[:36],
             f"[{_style(r.rca_accuracy)}]{_fmt(r.rca_accuracy)}[/]",
+            f"[{_style(r.rca_keyword_match)}]{_fmt(r.rca_keyword_match)}[/]",
             f"[{_style(r.evidence_quality)}]{_fmt(r.evidence_quality)}[/]",
             f"[{_style(r.actionability)}]{_fmt(r.actionability)}[/]",
             f"[{_style(r.reliability)}]{_fmt(r.reliability)}[/]",
@@ -119,6 +123,8 @@ def render_table(results: list[EvalResult], console: Console) -> None:
             f"[{_style(r.citation_integrity)}]{_fmt(r.citation_integrity)}[/]",
             f"[{_style(r.reasoning_quality)}]{_fmt(r.reasoning_quality)}[/]",
             f"[bold]{_fmt(r.overall_score)}[/bold]",
+            f"[bold]{_fmt(r.deterministic_score)}[/bold]",
+            str(r.estimated_tokens) if r.estimated_tokens else "-",
             str(r.elapsed_seconds),
         )
 
@@ -147,13 +153,19 @@ def _render_summary(
     summary.add_row("Scenarios run",      str(n))
     summary.add_row("Completed",          f"{len(completed)}/{n}")
     summary.add_row("Median time-to-RCA", f"{median_s:.1f}s")
-    summary.add_row("RCA accuracy",       avg("rca_accuracy"))
-    summary.add_row("Evidence quality",   avg("evidence_quality"))
-    summary.add_row("Actionability",      avg("actionability"))
-    summary.add_row("PII compliance",     avg("pii_compliance"))
-    summary.add_row("Citation integrity", avg("citation_integrity"))
-    summary.add_row("Reasoning quality",  avg("reasoning_quality"))
-    summary.add_row("Overall score",      avg("overall_score"))
+    summary.add_row("RCA accuracy",         avg("rca_accuracy"))
+    summary.add_row("RCA keyword match",   avg("rca_keyword_match"))
+    summary.add_row("Evidence quality",    avg("evidence_quality"))
+    summary.add_row("Actionability",       avg("actionability"))
+    summary.add_row("PII compliance",      avg("pii_compliance"))
+    summary.add_row("Citation integrity",  avg("citation_integrity"))
+    summary.add_row("Reasoning quality",   avg("reasoning_quality"))
+    summary.add_row("Overall score",       avg("overall_score"))
+    summary.add_row("Deterministic score", avg("deterministic_score"))
+    total_tokens = sum(r.estimated_tokens for r in results)
+    total_cost   = sum(r.estimated_cost_usd for r in results)
+    summary.add_row("Total tokens (est)",  f"{total_tokens:,}")
+    summary.add_row("Total cost (est)",    f"${total_cost:.4f}")
 
     console.print(summary)
 
@@ -173,9 +185,13 @@ def save_results(results: list[EvalResult], path: Path) -> None:
             "pii_compliance":        r.pii_compliance,
             "citation_integrity":    r.citation_integrity,
             "reasoning_quality":     r.reasoning_quality,
+            "rca_keyword_match":     r.rca_keyword_match,
             "overall_score":         r.overall_score,
+            "deterministic_score":   r.deterministic_score,
             "elapsed_seconds":       r.elapsed_seconds,
             "postmortem_confidence": r.postmortem_confidence,
+            "estimated_tokens":      r.estimated_tokens,
+            "estimated_cost_usd":    r.estimated_cost_usd,
             "notes":                 r.notes,
         }
         for r in results

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "dbl-0001",
+    "timestamp": "2024-05-10T09:01:05Z",
+    "service": "order-svc",
+    "level": "WARN",
+    "trace_id": "t-dbl-0001",
+    "logger": "com.zaxxer.hikari.pool.HikariPool",
+    "message": "HikariPool-1 - Pool stats (total=20, active=20, idle=0, waiting=47). Connection pool exhausted — all 20 connections in use. 47 threads waiting.",
+    "env": "production"
+  },
+  {
+    "id": "dbl-0002",
+    "timestamp": "2024-05-10T09:01:10Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-dbl-0002",
+    "logger": "com.zaxxer.hikari.pool.HikariPool",
+    "message": "HikariPool-1 - Connection is not available, request timed out after 30000ms. Deadlock victim chosen: transaction T-0482 on table order_items.",
+    "env": "production"
+  },
+  {
+    "id": "dbl-0003",
+    "timestamp": "2024-05-10T09:01:15Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-dbl-0003",
+    "logger": "org.hibernate.engine.jdbc.spi.SqlExceptionHelper",
+    "message": "ERROR: deadlock detected. DETAIL: Process 31842 waits for ShareLock on transaction 7291; blocked by process 31901. Process 31901 waits for ShareLock on transaction 7288; blocked by process 31842.",
+    "env": "production"
+  },
+  {
+    "id": "dbl-0004",
+    "timestamp": "2024-05-10T09:01:20Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-dbl-0004",
+    "logger": "com.company.order.service.OrderService",
+    "message": "CannotAcquireLockException: could not execute statement — deadlock on orders + order_items. Rolled back transaction. Retry 3/3 exhausted.",
+    "env": "production"
+  },
+  {
+    "id": "dbl-0005",
+    "timestamp": "2024-05-10T09:01:30Z",
+    "service": "order-svc",
+    "level": "WARN",
+    "trace_id": "t-dbl-0005",
+    "logger": "com.zaxxer.hikari.pool.HikariPool",
+    "message": "HikariPool-1 - Apparent connection leak detected on thread order-processor-7. stackTrace: com.company.order.repository.OrderRepository.findByStatus(OrderRepository.java:142).",
+    "env": "production"
+  },
+  {
+    "id": "dbl-0006",
+    "timestamp": "2024-05-10T09:02:00Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-dbl-0006",
+    "logger": "com.zaxxer.hikari.pool.HikariPool",
+    "message": "HikariPool-1 - Failed to validate connection (No operations allowed after connection closed). Pool saturated. maximumPoolSize=20, connectionTimeout=30000ms. Consider increasing pool size or fixing missing connection.close().",
+    "env": "production"
+  }
+]

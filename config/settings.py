@@ -9,6 +9,7 @@ load_dotenv(Path(__file__).parent.parent / ".env")
 
 ANTHROPIC_API_KEY: str = os.getenv("ANTHROPIC_API_KEY", "")
 GROQ_API_KEY: str = os.getenv("GROQ_API_KEY", "")
+SLACK_SIGNING_SECRET: str = os.getenv("SLACK_SIGNING_SECRET", "")
 
 # MCP server modes
 GITHUB_MODE: str = os.getenv("GITHUB_MODE", "mock")
@@ -17,6 +18,7 @@ LOGS_MODE: str = os.getenv("LOGS_MODE", "mock")
 
 # GitHub
 GITHUB_TOKEN: str = os.getenv("GITHUB_TOKEN", "")
+GITHUB_ORG: str = os.getenv("GITHUB_ORG", "company")
 GITHUB_API_URL: str = "https://api.github.com"
 
 # Jira

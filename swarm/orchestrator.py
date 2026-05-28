@@ -43,13 +43,29 @@ MCP_DIR = Path(__file__).parent.parent / "mcp_servers"
 
 # Orchestrator
 
+def _compute_usage(messages: list[dict]) -> dict:
+    """Estimate token usage and cost from GroupChat message list."""
+    total_chars = sum(len(m.get("content") or "") for m in messages)
+    estimated_tokens = total_chars // 4
+    # Groq Llama-3.3-70B pricing: $0.59/1M input, $0.79/1M output (~75/25 split)
+    estimated_cost = round(
+        (estimated_tokens * 0.75 * 0.59 + estimated_tokens * 0.25 * 0.79) / 1_000_000, 6
+    )
+    return {
+        "total_messages": len(messages),
+        "total_chars": total_chars,
+        "estimated_tokens": estimated_tokens,
+        "estimated_cost_usd": estimated_cost,
+    }
+
+
 async def run_incident_analysis(
     service: str,
     incident_time: str,
     severity: str,
     jira_project: str = "PAY",
     seed_overrides: dict[str, str] | None = None,
-) -> PostMortem | None:
+) -> tuple[PostMortem | None, dict]:
     """
     Spin up 4 agents, connect each to its MCP server, run the GroupChat,
     and return a validated PostMortem (or None if the Critic failed to produce one).
@@ -168,7 +184,7 @@ async def run_incident_analysis(
                         clear_history=False,
                     )
 
-    return _extract_postmortem(groupchat.messages)
+    return _extract_postmortem(groupchat.messages), _compute_usage(groupchat.messages)
 
 
 # Helper functions 
@@ -253,13 +269,15 @@ if __name__ == "__main__":
 
     print(f"\n[ENS] Starting RCA swarm for {args.service} @ {args.incident_time} ({args.severity})\n")
 
-    postmortem = asyncio.run(
+    postmortem, usage = asyncio.run(
         run_incident_analysis(args.service, args.incident_time, args.severity)
     )
 
     if postmortem is None:
         print("\n[ERROR] Swarm did not produce a valid PostMortem.", file=sys.stderr)
         sys.exit(1)
+
+    print(f"[ENS] Tokens (est): {usage['estimated_tokens']:,}  Cost (est): ${usage['estimated_cost_usd']:.4f}")
 
     output_json = postmortem.model_dump_json(indent=2)
 

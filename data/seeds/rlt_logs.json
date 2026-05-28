@@ -1,0 +1,62 @@
+[
+  {
+    "id": "rlt-0001",
+    "timestamp": "2024-07-20T11:00:10Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-rlt-0001",
+    "logger": "com.stripe.exception.RateLimitException",
+    "message": "Stripe API rate limit exceeded: HTTP 429 Too Many Requests on POST https://api.stripe.com/v1/charges. Retry-After: 30s. Requests in last 60s: 847 (limit: 100/s).",
+    "env": "production"
+  },
+  {
+    "id": "rlt-0002",
+    "timestamp": "2024-07-20T11:00:15Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-rlt-0002",
+    "logger": "com.stripe.exception.RateLimitException",
+    "message": "RateLimitException: Too Many Requests for url: https://api.stripe.com/v1/charges. Retry attempt 1/5 in 2s. Concurrent payment threads: 312 (expected <50).",
+    "env": "production"
+  },
+  {
+    "id": "rlt-0003",
+    "timestamp": "2024-07-20T11:00:20Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-rlt-0003",
+    "logger": "com.stripe.exception.RateLimitException",
+    "message": "RateLimitException: Retry 2/5 also 429. Retry storm detected — each retry triggers new requests. Missing exponential backoff. Thread pool queue depth: 1847.",
+    "env": "production"
+  },
+  {
+    "id": "rlt-0004",
+    "timestamp": "2024-07-20T11:00:30Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-rlt-0004",
+    "logger": "com.company.payment.gateway.StripeGateway",
+    "message": "Stripe gateway unavailable for 20s. RateLimitExceeded on all payment processing threads. Queued payments: 2341. Stripe dashboard shows spike: 8470 req/min vs normal 600 req/min.",
+    "env": "production"
+  },
+  {
+    "id": "rlt-0005",
+    "timestamp": "2024-07-20T11:00:45Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-rlt-0005",
+    "logger": "com.stripe.exception.RateLimitException",
+    "message": "Stripe rate limit: 429 received 312 times in last 35s. Likely cause: background job PaymentReconciliationJob triggered at 11:00:00Z without rate limiting. Job fires 1 API call per pending payment row (2341 rows).",
+    "env": "production"
+  },
+  {
+    "id": "rlt-0006",
+    "timestamp": "2024-07-20T11:01:00Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-rlt-0006",
+    "logger": "com.company.payment.jobs.PaymentReconciliationJob",
+    "message": "PaymentReconciliationJob: all 2341 API calls rejected by Stripe (429 RateLimitExceeded). No backoff implemented. Job will retry full batch in 60s, amplifying storm. Recommend circuit breaker + exponential backoff.",
+    "env": "production"
+  }
+]

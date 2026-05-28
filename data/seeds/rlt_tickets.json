@@ -1,0 +1,22 @@
+[
+  {
+    "id": "RLT-501",
+    "title": "Stripe 429 retry storm — PaymentReconciliationJob caused rate limit cascade",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-07-20",
+    "description": "PaymentReconciliationJob triggered at 11:00Z issued 2341 Stripe API calls in parallel with no rate limiting. Stripe returned 429 RateLimitExceeded on all calls. Job immediately retried without backoff, amplifying storm to 8470 req/min (10x Stripe limit). All live payment charges blocked for 6 minutes. Fix: add token-bucket rate limiter (100 req/s) and exponential backoff to StripeGateway.",
+    "url": "https://jira.company.com/browse/RLT-501",
+    "labels": ["rate-limit", "stripe", "payment-svc", "RateLimitExceeded", "production-incident"]
+  },
+  {
+    "id": "RLT-502",
+    "title": "Implement exponential backoff and rate limiting for Stripe API calls",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-07-20",
+    "description": "StripeGateway has no rate limiting or jitter. Add Resilience4j RateLimiter (100 req/s) and retry with exponential backoff + jitter (base=2s, max=60s, multiplier=2). PaymentReconciliationJob should chunk payments into batches of 50 with 1s delay between batches. Add Stripe API quota dashboard alert at 80% of limit.",
+    "url": "https://jira.company.com/browse/RLT-502",
+    "labels": ["stripe", "resilience", "rate-limiting", "payment-svc"]
+  }
+]

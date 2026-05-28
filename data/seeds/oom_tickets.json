@@ -1,0 +1,22 @@
+[
+  {
+    "id": "OOM-101",
+    "title": "payment-svc OOMKilled — JVM heap exhausted (4 restarts in 30min)",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-03-15",
+    "description": "payment-svc pod OOMKilled at 02:29Z. JVM heap -Xmx4g hit 100% utilization. GC overhead exceeded. SessionCache grew to 2.1M entries with no eviction policy. Pod restarted 4 times. Recommend: increase heap to -Xmx6g and add LRU eviction to SessionCache.",
+    "url": "https://jira.company.com/browse/OOM-101",
+    "labels": ["oom", "jvm", "payment-svc", "production-incident"]
+  },
+  {
+    "id": "OOM-102",
+    "title": "Add memory utilization alerts and heap dump on OOM for payment-svc",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-03-15",
+    "description": "No alerting existed for JVM heap > 80%. Add Prometheus alert for jvm_memory_used_bytes > 80% of max. Configure -XX:+HeapDumpOnOutOfMemoryError so future OOMs leave a heap dump for analysis. Also add SessionCache.size() metric.",
+    "url": "https://jira.company.com/browse/OOM-102",
+    "labels": ["observability", "payment-svc", "jvm"]
+  }
+]

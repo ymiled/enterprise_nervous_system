@@ -1,0 +1,22 @@
+[
+  {
+    "id": "DEP-201",
+    "title": "payment-svc pointing to staging DB after deploy — DB_HOST misconfigured",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-04-02",
+    "description": "Deploy a1b2c3d4 at 14:00Z set DB_HOST=db-staging.internal instead of db-prod.internal in production configmap. payment-svc lost all DB connectivity immediately. 100% error rate on POST /v1/payments since deploy. Rollback initiated at 14:05Z. Root cause: wrong value committed to k8s/production/payment-svc/configmap.yaml.",
+    "url": "https://jira.company.com/browse/DEP-201",
+    "labels": ["bad-deploy", "config-drift", "payment-svc", "production-incident", "DB_HOST"]
+  },
+  {
+    "id": "DEP-202",
+    "title": "Add config validation to deployment pipeline — prevent wrong DB_HOST in production",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-04-02",
+    "description": "Deploy pipeline has no guard against staging values leaking into production configs. Add pre-deploy linting step that asserts DB_HOST matches expected production hostname pattern. Also add integration test that verifies DB connectivity immediately after deploy before traffic is shifted.",
+    "url": "https://jira.company.com/browse/DEP-202",
+    "labels": ["deploy-safety", "config-validation", "platform"]
+  }
+]

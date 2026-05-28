@@ -1,0 +1,82 @@
+[
+  {
+    "id": "oom-0001",
+    "timestamp": "2024-03-15T02:28:11Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-oom-0001",
+    "logger": "java.lang.Runtime",
+    "message": "GC overhead limit exceeded — heap usage at 97% (heap: 3892MB / 4096MB). Full GC triggered every 2s.",
+    "env": "production"
+  },
+  {
+    "id": "oom-0002",
+    "timestamp": "2024-03-15T02:28:45Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-oom-0002",
+    "logger": "java.lang.Runtime",
+    "message": "java.lang.OutOfMemoryError: Java heap space at com.company.payment.cache.SessionCache.put(SessionCache.java:87)",
+    "env": "production"
+  },
+  {
+    "id": "oom-0003",
+    "timestamp": "2024-03-15T02:28:46Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-oom-0003",
+    "logger": "java.lang.Runtime",
+    "message": "java.lang.OutOfMemoryError: Java heap space at java.util.Arrays.copyOf(Arrays.java:3210)",
+    "env": "production"
+  },
+  {
+    "id": "oom-0004",
+    "timestamp": "2024-03-15T02:28:47Z",
+    "service": "payment-svc",
+    "level": "FATAL",
+    "trace_id": "t-oom-0004",
+    "logger": "java.lang.Runtime",
+    "message": "JVM is about to exit: OutOfMemoryError. Native memory allocation (mmap) failed to map 536870912 bytes for committing reserved memory.",
+    "env": "production"
+  },
+  {
+    "id": "oom-0005",
+    "timestamp": "2024-03-15T02:29:00Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-oom-0005",
+    "logger": "org.springframework.boot.SpringApplication",
+    "message": "Application failed to start due to OutOfMemoryError. Pod restarting (restart #4 in 30m). Last known heap: 4096MB / 4096MB.",
+    "env": "production"
+  },
+  {
+    "id": "oom-0006",
+    "timestamp": "2024-03-15T02:29:30Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-oom-0006",
+    "logger": "java.lang.Runtime",
+    "message": "Container OOMKilled by kernel (exit code 137). JVM heap limit: -Xmx4g. Recommend increasing to -Xmx6g or profiling SessionCache for memory leak.",
+    "env": "production"
+  },
+  {
+    "id": "oom-0007",
+    "timestamp": "2024-03-15T02:30:00Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-oom-0007",
+    "logger": "com.company.payment.cache.SessionCache",
+    "message": "SessionCache size reached 2.1M entries (unbounded). No eviction policy configured. Suspect memory leak in session accumulation path.",
+    "env": "production"
+  },
+  {
+    "id": "oom-0008",
+    "timestamp": "2024-03-15T02:30:15Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-oom-0008",
+    "logger": "io.micrometer.core.instrument.Metrics",
+    "message": "jvm.memory.used{area=heap} = 4294967296 bytes. jvm.gc.pause{cause=OutOfMemoryError} p99=8200ms. Pod will restart.",
+    "env": "production"
+  }
+]

@@ -1,0 +1,62 @@
+[
+  {
+    "id": "dep-0001",
+    "timestamp": "2024-04-02T14:03:11Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-dep-0001",
+    "logger": "com.zaxxer.hikari.pool.HikariPool",
+    "message": "HikariPool-1 - Connection is not available, request timed out after 30000ms. Cannot connect to DB_HOST=db-staging.internal:5432",
+    "env": "production"
+  },
+  {
+    "id": "dep-0002",
+    "timestamp": "2024-04-02T14:03:12Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-dep-0002",
+    "logger": "org.postgresql.Driver",
+    "message": "Connection refused: db-staging.internal:5432. Host is not reachable from production network. DB_HOST env var may be misconfigured.",
+    "env": "production"
+  },
+  {
+    "id": "dep-0003",
+    "timestamp": "2024-04-02T14:03:13Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-dep-0003",
+    "logger": "com.company.payment.repository.PaymentRepository",
+    "message": "Unable to acquire JDBC Connection for datasource url=jdbc:postgresql://db-staging.internal:5432/payments. All 10 pool connections failed.",
+    "env": "production"
+  },
+  {
+    "id": "dep-0004",
+    "timestamp": "2024-04-02T14:03:20Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-dep-0004",
+    "logger": "org.springframework.boot.context.config.ConfigDataEnvironment",
+    "message": "Active profile: production. Detected DB_HOST=db-staging.internal — expected db-prod.internal. Possible misconfiguration introduced in recent deploy.",
+    "env": "production"
+  },
+  {
+    "id": "dep-0005",
+    "timestamp": "2024-04-02T14:03:25Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-dep-0005",
+    "logger": "com.company.payment.service.PaymentService",
+    "message": "500 Internal Server Error on POST /v1/payments: DataAccessException — no DB connection. Error rate 100% since 14:03:00Z (deploy at 14:00:00Z).",
+    "env": "production"
+  },
+  {
+    "id": "dep-0006",
+    "timestamp": "2024-04-02T14:04:00Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-dep-0006",
+    "logger": "com.company.platform.deploy.RolloutController",
+    "message": "Deploy a1b2c3d4 went live at 14:00:00Z. Commit message: 'chore: update DB_HOST in production config'. Rollback available.",
+    "env": "production"
+  }
+]

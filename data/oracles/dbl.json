@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for DB deadlock / connection pool exhaustion incident type.",
+  "incident": "DB deadlock — HikariCP pool exhaustion + transaction deadlock on order_items",
+  "primary_fix_commit": {
+    "sha": "",
+    "sha_prefix_8": "",
+    "date": "",
+    "message": "No fix commit — DB tuning + connection leak fix needed"
+  },
+  "ticket_ids": ["DBL-301", "DBL-302"],
+  "logger_keywords": ["com.zaxxer.hikari.pool.HikariPool"],
+  "root_cause_keywords": ["deadlock", "connection pool", "HikariPool"]
+}

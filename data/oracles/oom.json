@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for OOM / memory leak incident type.",
+  "incident": "OOM — JVM heap exhaustion / pod OOMKilled",
+  "primary_fix_commit": {
+    "sha": "",
+    "sha_prefix_8": "",
+    "date": "",
+    "message": "No fix commit — infra incident (JVM heap limit + SessionCache eviction policy)"
+  },
+  "ticket_ids": ["OOM-101", "OOM-102"],
+  "logger_keywords": ["java.lang.Runtime"],
+  "root_cause_keywords": ["heap", "out of memory", "OOMKilled"]
+}

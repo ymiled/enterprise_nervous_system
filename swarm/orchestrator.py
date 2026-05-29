@@ -20,6 +20,7 @@ import argparse
 import asyncio
 import json
 import sys
+from contextlib import AsyncExitStack
 from pathlib import Path
 
 # Allow running from project root or swarm/
@@ -95,97 +96,112 @@ async def run_incident_analysis(
     env = seed_overrides or {}
     mgr = MCPClientSessionManager()
 
-    # Open all three MCP server sessions (each spawns a subprocess over stdio).
-    # seed_overrides are passed as env vars so each server loads the right seed file.
-    async with mgr.open_session(StdioConfig(server_name="logs", command="python", args=[str(MCP_DIR / "logs_mcp.py")], environment=env or None)) as log_session:
-        async with mgr.open_session(StdioConfig(server_name="github", command="python", args=[str(MCP_DIR / "github_mcp.py")], environment=env or None)) as github_session:
-            async with mgr.open_session(StdioConfig(server_name="jira", command="python", args=[str(MCP_DIR / "jira_mcp.py")], environment=env or None)) as jira_session:
+    # Holds (postmortem, usage). Computed as the LAST statement inside the
+    # session block so it's already set before AsyncExitStack teardown runs.
+    result: tuple[PostMortem | None, dict] | None = None
 
-                log_toolkit    = await create_toolkit(log_session)
-                github_toolkit = await create_toolkit(github_session)
-                jira_toolkit   = await create_toolkit(jira_session)
+    # Open all three MCP server sessions in parallel (was sequential nested with).
+    # AsyncExitStack ensures all three are cleaned up even if one fails.
+    try:
+      async with AsyncExitStack() as stack:
+        log_session, github_session, jira_session = await asyncio.gather(
+            stack.enter_async_context(
+                mgr.open_session(StdioConfig(server_name="logs",   command="python", args=[str(MCP_DIR / "logs_mcp.py")],   environment=env or None))
+            ),
+            stack.enter_async_context(
+                mgr.open_session(StdioConfig(server_name="github", command="python", args=[str(MCP_DIR / "github_mcp.py")], environment=env or None))
+            ),
+            stack.enter_async_context(
+                mgr.open_session(StdioConfig(server_name="jira",   command="python", args=[str(MCP_DIR / "jira_mcp.py")],   environment=env or None))
+            ),
+        )
 
-                # Coordinator sends the brief; agents follow in round-robin order.
-                # This ensures DevOps investigates FIRST so SWE can use its
-                # IMPLICATED_LOGGERS output as commit search keywords.
-                coordinator = UserProxyAgent(
-                    name="Coordinator",
-                    human_input_mode="NEVER",
-                    code_execution_config=False,
-                    max_consecutive_auto_reply=0,  # speaks only once (the brief)
-                )
+        log_toolkit    = await create_toolkit(log_session)
+        github_toolkit = await create_toolkit(github_session)
+        jira_toolkit   = await create_toolkit(jira_session)
 
-                # Agents
-                devops_agent = AssistantAgent(
-                    name="DevOps_Agent",
-                    system_message=DEVOPS_PROMPT,
-                    llm_config=LLM_CONFIG,
-                    human_input_mode="NEVER",
-                )
-                _register_toolkit(devops_agent, log_toolkit)
+        # Coordinator sends the brief; agents follow in round-robin order.
+        coordinator = UserProxyAgent(
+            name="Coordinator",
+            human_input_mode="NEVER",
+            code_execution_config=False,
+            max_consecutive_auto_reply=0,
+        )
 
-                swe_agent = AssistantAgent(
-                    name="SWE_Agent",
-                    system_message=SWE_PROMPT,
-                    llm_config=LLM_CONFIG,
-                    human_input_mode="NEVER",
-                )
-                _register_toolkit(swe_agent, github_toolkit)
+        devops_agent = AssistantAgent(
+            name="DevOps_Agent",
+            system_message=DEVOPS_PROMPT,
+            llm_config=LLM_CONFIG,
+            human_input_mode="NEVER",
+        )
+        _register_toolkit(devops_agent, log_toolkit)
 
-                pm_agent = AssistantAgent(
-                    name="PM_Agent",
-                    system_message=PM_PROMPT.format(jira_project=jira_project),
-                    llm_config=LLM_CONFIG,
-                    human_input_mode="NEVER",
-                )
-                _register_toolkit(pm_agent, jira_toolkit)
+        swe_agent = AssistantAgent(
+            name="SWE_Agent",
+            system_message=SWE_PROMPT,
+            llm_config=LLM_CONFIG,
+            human_input_mode="NEVER",
+        )
+        _register_toolkit(swe_agent, github_toolkit)
 
-                # Critic has no tools, it reads conversation and emits PostMortem JSON
-                critic_agent = AssistantAgent(
-                    name="Critic_Agent",
-                    system_message=CRITIC_PROMPT,
-                    llm_config=LLM_CONFIG,
-                    human_input_mode="NEVER",
-                )
+        pm_agent = AssistantAgent(
+            name="PM_Agent",
+            system_message=PM_PROMPT.format(jira_project=jira_project),
+            llm_config=LLM_CONFIG,
+            human_input_mode="NEVER",
+        )
+        _register_toolkit(pm_agent, jira_toolkit)
 
-                # GroupChat — Coordinator sends the brief, then round_robin:
-                #   DevOps (logs) → SWE (commits) → PM (tickets) → Critic (synthesise)
-                # This ordering guarantees SWE has DevOps's IMPLICATED_LOGGERS
-                # available before it starts its commit search.
-                groupchat = GroupChat(
-                    agents=[coordinator, devops_agent, swe_agent, pm_agent, critic_agent],
-                    messages=[],
-                    max_round=30,
-                    speaker_selection_method="round_robin",
-                )
+        critic_agent = AssistantAgent(
+            name="Critic_Agent",
+            system_message=CRITIC_PROMPT,
+            llm_config=LLM_CONFIG,
+            human_input_mode="NEVER",
+        )
 
-                chat_manager = GroupChatManager(
-                    groupchat=groupchat,
-                    llm_config=LLM_CONFIG,
-                    is_termination_msg=_is_postmortem_json,
-                )
+        groupchat = GroupChat(
+            agents=[coordinator, devops_agent, swe_agent, pm_agent, critic_agent],
+            messages=[],
+            max_round=30,
+            speaker_selection_method="round_robin",
+        )
 
-                await coordinator.a_initiate_chat(
-                    chat_manager,
-                    message=incident_brief,
-                    silent=False,
-                )
+        chat_manager = GroupChatManager(
+            groupchat=groupchat,
+            llm_config=LLM_CONFIG,
+            is_termination_msg=_is_postmortem_json,
+        )
 
-                # Self-correction pass: if the Critic produced a non-inconclusive JSON but
-                # is missing evidence.commits or evidence.logs, ask it to fix that.
-                # Skip self-correction when inconclusive=True — empty commits/tickets is correct then.
-                pm = _extract_postmortem(groupchat.messages)
-                if pm is not None and not pm.inconclusive and (not pm.evidence.commits or not pm.evidence.logs):
-                    await devops_agent.a_initiate_chat(
-                        chat_manager,
-                        message=CRITIC_SELF_CORRECT_PROMPT.format(
-                            missing="evidence.commits" if not pm.evidence.commits else "evidence.logs"
-                        ),
-                        silent=False,
-                        clear_history=False,
-                    )
+        await coordinator.a_initiate_chat(
+            chat_manager,
+            message=incident_brief,
+            silent=False,
+        )
 
-    return _extract_postmortem(groupchat.messages), _compute_usage(groupchat.messages)
+        # Self-correction: if Critic's JSON is missing commits or logs, ask it to fix.
+        pm = _extract_postmortem(groupchat.messages)
+        if pm is not None and not pm.inconclusive and (not pm.evidence.commits or not pm.evidence.logs):
+            await devops_agent.a_initiate_chat(
+                chat_manager,
+                message=CRITIC_SELF_CORRECT_PROMPT.format(
+                    missing="evidence.commits" if not pm.evidence.commits else "evidence.logs"
+                ),
+                silent=False,
+                clear_history=False,
+            )
+
+        # Last statement inside the session block: the chat is done, so capture
+        # the answer NOW. If AsyncExitStack teardown then raises the anyio
+        # "cancel scope" RuntimeError, `result` is already populated.
+        result = _extract_postmortem(groupchat.messages), _compute_usage(groupchat.messages)
+    except RuntimeError as exc:
+        # anyio tears MCP stdio sessions down in a task other than the one that
+        # opened them (worsened by asyncio.gather). This fires AFTER the chat
+        # finishes, so swallow it only when we already have a result.
+        if result is None or "cancel scope" not in str(exc):
+            raise
+
+    return result if result is not None else (None, _compute_usage([]))
 
 
 # Helper functions 

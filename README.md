@@ -98,19 +98,23 @@ The benchmark evaluates the swarm on **31 scenarios** across 5 incident families
 
 ### Benchmark results
 
-| Group        | Median Overall Score | Median Det. Score | Median Time (s) |
-|--------------|----------------------|-------------------|-----------------|
-| Log4Shell    | 0.748                | 0.82              | 19.4            |
-| Text4Shell   | 0.905                | 0.94              | 17.25           |
-| Negative     | 0.810                | 0.89              | 21.9            |
-| OOM          | 0.810                | 0.945             | 7.8             |
-| BadDeploy    | 0.952                | 0.945             | 8.9             |
-| Deadlock     | 0.810                | 0.86              | 6.2             |
-| DepFail      | 0.810                | 0.945             | 6.8             |
-| RateLimit    | 0.810                | 0.945             | 6.6             |
-| **All (31)** | **0.838**            | **0.912**         | **~15**         |
+Measured on a full 31-scenario run (Groq Llama-3.3-70B, mock MCP sources). Scores are **means** over each group; time is median wall-clock per scenario.
 
-_Det. Score = deterministic-only (no LLM judge). See `benchmarks/results/run_latest.json` for full per-scenario data._
+| Group        | n  | Mean Overall Score | Mean Det. Score | Median Time (s) |
+|--------------|----|--------------------|-----------------|-----------------|
+| Log4Shell    | 12 | 0.710              | 0.828           | 6.3             |
+| Text4Shell   | 6  | 0.829              | 0.843           | 4.5             |
+| Negative     | 3  | 0.638              | 0.828           | 5.8             |
+| OOM          | 2  | 0.810              | 0.945           | 5.0             |
+| BadDeploy    | 2  | 0.952              | 0.945           | 4.4             |
+| Deadlock     | 2  | 0.810              | 0.945           | 4.8             |
+| DepFail      | 2  | 0.810              | 0.945           | 6.9             |
+| RateLimit    | 2  | 0.810              | 0.945           | 4.0             |
+| **All (31)** | 31 | **0.767**          | **0.869**       | **~5.5**        |
+
+Cost for the full run: **111,916 est. tokens / $0.0716** total. Negative and Log4Shell drag the overall mean — negatives penalize any fabricated root cause, and the 12 Log4Shell variants include harder paraphrase/time-window cases.
+
+_Det. Score = deterministic-only (no LLM judge). See `benchmarks/results/full_run.json` for full per-scenario data._
 
 ### Evaluation Metrics (8 dimensions)
 
@@ -138,6 +142,25 @@ uv run python benchmarks/runner.py --ids oom-01 dep-01 dbl-01 svc-01 rlt-01
 
 # Save results to custom path
 uv run python benchmarks/runner.py --output benchmarks/results/my_run.json
+```
+
+### Ablation: 4-agent swarm vs 1-agent baseline
+
+Does the multi-agent setup earn its complexity? Ran the swarm head-to-head against a single LLM call given the same seed data, on 5 representative scenarios.
+
+| Scenario   | Swarm Overall | Baseline Overall | Swarm Tokens | Baseline Tokens |
+|------------|---------------|------------------|--------------|-----------------|
+| ls-01      | **1.000**     | 0.686            | 5,096        | 11,525          |
+| t4s-01     | 0.952         | 0.952            | 5,033        | 6,863           |
+| oom-01     | 0.810         | 0.810            | 1,786        | 2,852           |
+| dep-01     | 0.952         | 0.952            | 2,082        | 3,052           |
+| neg-01     | 0.143         | 0.686            | 0            | 4,749           |
+| **Mean**   | **0.771**     | **0.817**        | **2,799**    | **5,808**       |
+
+**Honest finding:** the baseline edges out the swarm on mean score (0.817 vs 0.771) — but the gap is entirely one scenario, `neg-01`, where the swarm produced **0 tokens** (a session-teardown crash, not worse reasoning). On every scenario the swarm completed, it **tied or beat** the baseline — and won `ls-01` decisively (1.000 vs 0.686) by citing the correct commit + all three evidence types. The swarm also uses **~half the tokens** (2,799 vs 5,808 avg) because each agent gets a focused sub-prompt instead of one giant context dump. Takeaway: multi-agent buys evidence discipline and token efficiency, but the orchestrator needs a fallback so a session crash can't zero out a scenario. Run it yourself:
+
+```bash
+uv run python benchmarks/ablation_runner.py --ids ls-01 t4s-01 neg-01 oom-01 dep-01
 ```
 
 ### Non-CVE scenarios (10 new)

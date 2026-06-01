@@ -43,6 +43,7 @@ TICKETS_SEED_FILE: Path = Path(os.getenv("TICKETS_SEED_FILE", str(SEEDS_DIR / "l
 DEFAULT_INCIDENT_SERVICE: str = os.getenv("DEFAULT_INCIDENT_SERVICE", "payment-svc")
 DEFAULT_INCIDENT_TIME: str = os.getenv("DEFAULT_INCIDENT_TIME", "2021-12-10T06:15:00Z")
 DEFAULT_INCIDENT_SEVERITY: str = os.getenv("DEFAULT_INCIDENT_SEVERITY", "P0")
+DEFAULT_JIRA_PROJECT: str = os.getenv("DEFAULT_JIRA_PROJECT", "LOG4J2")
 
 # AG2 LLM config — Groq via OpenAI-compatible endpoint (free tier)
 # api_type "openai" + base_url routes through AG2's well-tested OpenAI client,

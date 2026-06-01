@@ -34,6 +34,7 @@ from config.settings import (
     DEFAULT_INCIDENT_SEVERITY,
     DEFAULT_INCIDENT_SERVICE,
     DEFAULT_INCIDENT_TIME,
+    DEFAULT_JIRA_PROJECT,
     GITHUB_ORG,
     LLM_CONFIG,
 )
@@ -144,7 +145,7 @@ async def run_incident_analysis(
     service: str,
     incident_time: str,
     severity: str,
-    jira_project: str = "PAY",
+    jira_project: str | None = None,
     seed_overrides: dict[str, str] | None = None,
 ) -> tuple[PostMortem | None, dict]:
     """
@@ -159,6 +160,7 @@ async def run_incident_analysis(
         seed_overrides: Optional env vars forwarded to MCP subprocesses to swap
                         seed data files, e.g. {"LOGS_SEED_FILE": "/path/to/oom_logs.json"}
     """
+    jira_project = jira_project or DEFAULT_JIRA_PROJECT
     incident_brief = (
         f"INCIDENT REPORT\n"
         f"{'=' * 40}\n"

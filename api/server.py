@@ -81,7 +81,7 @@ class AnalyzeRequest(BaseModel):
     service: str
     incident_time: str
     severity: Literal["P0", "P1", "P2", "P3"]
-    jira_project: str = "PAY"
+    jira_project: str = "LOG4J2"
     mode: Literal["auto", "swarm", "single"] = "auto"
 
 

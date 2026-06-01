@@ -118,6 +118,12 @@ def _mock_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
     return {"error": f"Commit {commit_sha!r} not found in mock data for repo {repo!r}"}
 
 
+_SECURITY_FIX_TERMS = frozenset({
+    "disable", "restrict", "patch", "block",
+    "cve", "log4j2-3", "log4j2-2", "security", "vulnerability", "exploit",
+})
+
+
 def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[str, Any]]:
     commits = _load_seed_commits()
     if not commits:
@@ -130,15 +136,24 @@ def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[
     for c in commits:
         if _commit_ts(c) < cutoff:
             continue
-        searchable = " ".join([
-            c.get("message", ""),
-            c.get("body", ""),
-            " ".join(c.get("files_changed", [])),
-            c.get("diff", "")[:2000],  # also search diff content
-        ]).lower()
-        if kw in searchable:
-            results.append(_slim(_scrub_author(c)))
-    return sorted(results, key=lambda c: c["timestamp"], reverse=True)[:10]
+        msg_lower   = c.get("message", "").lower()
+        files_lower = " ".join(c.get("files_changed", [])).lower()
+        body_lower  = c.get("body", "").lower()
+        diff_lower  = c.get("diff", "")[:2000].lower()
+        searchable  = " ".join([msg_lower, body_lower, files_lower, diff_lower])
+        if kw not in searchable:
+            continue
+
+        name_match = int(kw in msg_lower or kw in files_lower)
+        # Security-fix commits rank highest: name match + fix keyword in message/files.
+        # Prevents documentation/test commits (same file, no fix term) from burying
+        # the actual security patch in ranked results.
+        is_fix = int(name_match and any(t in msg_lower or t in files_lower for t in _SECURITY_FIX_TERMS))
+        results.append((_slim(_scrub_author(c)), is_fix, name_match))
+
+    # Tier 1: security fix + name match; Tier 2: name match only; Tier 3: diff-only
+    results.sort(key=lambda x: (x[1], x[2], x[0]["timestamp"]), reverse=True)
+    return [r for r, *_ in results[:10]]
 
 
 # Live implementations

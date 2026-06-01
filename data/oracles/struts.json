@@ -1,0 +1,26 @@
+{
+  "_source": "GitHub Advisory Database: https://github.com/advisories/GHSA-j77q-2qqg-6989",
+  "_ghsa": "GHSA-j77q-2qqg-6989",
+  "_comment": "CVE-2017-5638 exploited in Equifax breach 2017. Fix commit SHA fetched directly from GHSA API.",
+  "incident": "Apache Struts CVE-2017-5638: OGNL expression injection via Content-Type header in Jakarta Multipart parser — RCE",
+  "cve_id": "CVE-2017-5638",
+  "severity": "critical",
+  "ecosystem": "maven",
+  "package": "org.apache.struts:struts2-core",
+  "patched_version": "2.3.32 / 2.5.10.1",
+  "primary_fix_commit": {
+    "sha": "352306493971e7d5a756d61780d57a76eb1f519a",
+    "sha_prefix_8": "35230649",
+    "date": "2017-03-06",
+    "message": "WW-4639 Validate that no multipart ContentType header contains an OGNL expression",
+    "url": "https://github.com/apache/struts/commit/352306493971e7d5a756d61780d57a76eb1f519a"
+  },
+  "ticket_ids": ["STRUTS-101", "STRUTS-102"],
+  "logger_keywords": ["org.apache.struts2.dispatcher.multipart.JakartaMultiPartRequest"],
+  "root_cause_keywords": ["OGNL", "Content-Type", "multipart"],
+  "references": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2017-5638",
+    "https://cwiki.apache.org/confluence/display/WW/S2-045",
+    "https://github.com/apache/struts/commit/352306493971e7d5a756d61780d57a76eb1f519a"
+  ]
+}

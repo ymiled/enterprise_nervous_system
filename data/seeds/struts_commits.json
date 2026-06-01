@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "352306493971e7d5a756d61780d57a76eb1f519a",
+    "sha_short": "35230649",
+    "message": "WW-4639 Validate that no multipart ContentType header contains OGNL expression (CVE-2017-5638)\n\nJakartaMultiPartRequest: validate Content-Type header value before OGNL evaluation.\nPrevents RCE via crafted Content-Type header in Apache Struts2 multipart upload.\nFixes S2-045 / CVE-2017-5638 — critical OGNL injection vulnerability.\nSource: https://github.com/apache/struts/commit/352306493971e7d5a756d61780d57a76eb1f519a",
+    "author": "apache-struts-team",
+    "date": "2017-03-06T00:00:00Z",
+    "files_changed": [
+      "plugins/multipart/src/main/java/org/apache/struts2/dispatcher/multipart/JakartaMultiPartRequest.java"
+    ],
+    "diff": "// Fix: CVE-2017-5638 JakartaMultiPartRequest OGNL injection via Content-Type\n// Validate Content-Type header does not contain OGNL expression before parsing",
+    "url": "https://github.com/apache/struts/commit/352306493971e7d5a756d61780d57a76eb1f519a"
+  }
+]

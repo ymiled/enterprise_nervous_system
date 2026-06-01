@@ -1,0 +1,14 @@
+{
+  "_comment": "Based on CircleCI 2021-11-08 incident: schema migration changed column type, strict validation broke distributor. https://discuss.circleci.com/t/incident-report-november-8-2021-jobs-stuck-in-a-not-running-state/41890",
+  "_source": "https://discuss.circleci.com/t/incident-report-november-8-2021-jobs-stuck-in-a-not-running-state/41890",
+  "incident": "DB schema migration changed job_type column type text→integer; strict schema validation in distributor failed on mixed-type rows",
+  "primary_fix_commit": {
+    "sha": "a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8",
+    "sha_prefix_8": "a9b0c1d2",
+    "date": "2021-11-08",
+    "message": "fix: bridge code for JobDistributor column type mismatch after schema migration"
+  },
+  "ticket_ids": ["JOBS-501", "JOBS-502"],
+  "logger_keywords": ["com.company.jobs.distributor.JobDistributor"],
+  "root_cause_keywords": ["schema migration", "type mismatch", "job_type"]
+}

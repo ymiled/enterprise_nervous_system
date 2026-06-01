@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for third-party API degradation (Stripe) incident type.",
+  "incident": "Stripe API outage caused 87% payment failure rate — no circuit breaker existed",
+  "primary_fix_commit": {
+    "sha": "c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+    "sha_prefix_8": "c4d5e6f7",
+    "date": "2024-11-08",
+    "message": "feat: add circuit breaker and queue fallback for Stripe API degradation"
+  },
+  "ticket_ids": ["PAY-501", "PAY-502"],
+  "logger_keywords": ["com.stripe.exception.ApiConnectionException"],
+  "root_cause_keywords": ["Stripe", "timeout", "third-party"]
+}

@@ -1,0 +1,14 @@
+[
+  {
+    "sha": "002546b3e4b8d791ea6acccb81eb3168f51abb15",
+    "sha_short": "002546b3",
+    "message": "Disallow ClassLoader access via DataBinder (CVE-2022-22965 / Spring4Shell)\n\nWebDataBinder: disallow binding to class.classLoader and class.protectionDomain\nfield patterns. Prevents attacker from overwriting Tomcat logging configuration\nto achieve RCE via JDK 9+ module system (Spring4Shell / CVE-2022-22965).\nSource: https://github.com/spring-projects/spring-framework/commit/002546b3e4b8d791ea6acccb81eb3168f51abb15",
+    "author": "spring-projects-team",
+    "date": "2022-03-31T00:00:00Z",
+    "files_changed": [
+      "spring-web/src/main/java/org/springframework/web/bind/WebDataBinder.java"
+    ],
+    "diff": "// Fix: CVE-2022-22965 WebDataBinder ClassLoader access\n// Disallow class.classLoader and class.protectionDomain parameter binding",
+    "url": "https://github.com/spring-projects/spring-framework/commit/002546b3e4b8d791ea6acccb81eb3168f51abb15"
+  }
+]

@@ -14,11 +14,13 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import hmac
+import json
 import logging
 import sys
 import time
+from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Literal
+from typing import AsyncIterator, Literal
 
 import httpx
 from fastapi import FastAPI, HTTPException, Request, Security
@@ -27,19 +29,31 @@ from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import API_KEY, SLACK_SIGNING_SECRET
-from swarm.orchestrator import run_incident_analysis
+from config.settings import API_KEY, PAGERDUTY_WEBHOOK_SECRET, SLACK_SIGNING_SECRET, SLACK_WEBHOOK_URL
+from swarm.orchestrator import _should_use_swarm, run_incident_analysis
 
 log = logging.getLogger("ens.api")
 
-app = FastAPI(title="Enterprise Nervous System", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    if not API_KEY:
+        log.warning("API_KEY not set — /analyze is unauthenticated. Set API_KEY in .env for production.")
+    else:
+        log.info("API key auth enabled on /analyze.")
+    if not SLACK_SIGNING_SECRET:
+        log.warning("SLACK_SIGNING_SECRET not set — /slack/analyze accepts unsigned requests.")
+    yield
+
+
+app = FastAPI(title="Enterprise Nervous System", version="0.1.0", lifespan=lifespan)
 
 _SWARM_TIMEOUT = 120.0  # seconds before a stuck swarm is killed
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
-# ── Auth dependency ───────────────────────────────────────────────────────────
+# Auth dependency
 
 async def _require_api_key(key: str | None = Security(_api_key_header)) -> None:
     if not API_KEY:
@@ -48,7 +62,7 @@ async def _require_api_key(key: str | None = Security(_api_key_header)) -> None:
         raise HTTPException(status_code=401, detail="Invalid or missing X-API-Key header")
 
 
-# ── GET /health ───────────────────────────────────────────────────────────────
+# GET /health
 
 @app.get("/health")
 async def health():
@@ -61,17 +75,24 @@ async def health():
     }
 
 
-# ── POST /analyze ─────────────────────────────────────────────────────────────
+# POST /analyze
 
 class AnalyzeRequest(BaseModel):
     service: str
     incident_time: str
     severity: Literal["P0", "P1", "P2", "P3"]
     jira_project: str = "PAY"
+    mode: Literal["auto", "swarm", "single"] = "auto"
 
 
 @app.post("/analyze")
 async def analyze(req: AnalyzeRequest, _: None = Security(_require_api_key)):
+    use_swarm = (
+        req.mode == "swarm"
+        or (req.mode == "auto" and _should_use_swarm(req.service, req.incident_time, req.severity))
+    )
+    log.info("RCA mode: %s (requested=%s) for %s", "swarm" if use_swarm else "single", req.mode, req.service)
+
     try:
         pm, usage = await asyncio.wait_for(
             run_incident_analysis(
@@ -94,10 +115,11 @@ async def analyze(req: AnalyzeRequest, _: None = Security(_require_api_key)):
 
     result = pm.model_dump()
     result["_usage"] = usage
+    result["_mode"] = "swarm" if use_swarm else "single"
     return result
 
 
-# ── POST /slack/analyze ───────────────────────────────────────────────────────
+# POST /slack/analyze
 
 def _verify_slack_signature(secret: str, body: bytes, timestamp: str, signature: str) -> bool:
     basestring = f"v0:{timestamp}:{body.decode()}"
@@ -134,6 +156,113 @@ async def _run_and_notify(service: str, incident_time: str, severity: str, respo
         await client.post(response_url, json={"response_type": "in_channel", "text": msg})
 
 
+# POST /pagerduty/webhook
+
+_PD_SEVERITY_MAP = {
+    "critical": "P0",
+    "high":     "P1",
+    "warning":  "P2",
+    "error":    "P2",
+    "info":     "P3",
+}
+
+_TRIGGER_EVENTS = {"incident.triggered", "incident.acknowledged"}
+
+
+async def _post_to_slack(text: str) -> None:
+    if not SLACK_WEBHOOK_URL:
+        log.warning("SLACK_WEBHOOK_URL not set — skipping Slack notification")
+        return
+    async with httpx.AsyncClient(timeout=10) as client:
+        await client.post(SLACK_WEBHOOK_URL, json={"text": text})
+
+
+async def _run_pagerduty_incident(service: str, incident_time: str, severity: str, pd_id: str, jira_project: str = "LOG4J2") -> None:
+    try:
+        pm, usage = await asyncio.wait_for(
+            run_incident_analysis(service=service, incident_time=incident_time, severity=severity, jira_project=jira_project),
+            timeout=_SWARM_TIMEOUT,
+        )
+    except asyncio.TimeoutError:
+        await _post_to_slack(f":x: *[ENS]* RCA timed out after {_SWARM_TIMEOUT:.0f}s for `{service}` (PD: {pd_id})")
+        return
+    except Exception as exc:
+        await _post_to_slack(f":x: *[ENS]* RCA failed for `{service}` (PD: {pd_id}): {exc}")
+        return
+
+    if pm is None:
+        await _post_to_slack(f":warning: *[ENS]* Swarm produced no PostMortem for `{service}` (PD: {pd_id})")
+        return
+
+    if pm.inconclusive:
+        msg = (
+            f":mag: *[ENS] Inconclusive RCA — {service} {severity}* (PD: {pd_id})\n"
+            f"*Root cause:* {pm.root_cause}\n"
+            f"*Confidence:* {pm.confidence_score:.0%} — insufficient evidence for a definitive diagnosis"
+        )
+    else:
+        actions = "\n".join(
+            f"  • [{a.priority}] {a.description} (`{a.ticket_id}`)"
+            for a in pm.recommended_actions[:3]
+        )
+        tok = usage.get("estimated_tokens", 0)
+        msg = (
+            f":rotating_light: *[ENS] RCA complete — {service} {severity}* (PD: {pd_id})\n"
+            f"*Root cause:* {pm.root_cause}\n"
+            f"*Actions ({len(pm.recommended_actions)}):*\n{actions}\n"
+            f"*Confidence:* {pm.confidence_score:.0%}  |  Tokens: {tok:,}"
+        )
+
+    await _post_to_slack(msg)
+
+
+@app.post("/pagerduty/webhook", status_code=200)
+async def pagerduty_webhook(request: Request):
+    """
+    Receives PagerDuty V3 webhooks (incident.triggered / incident.acknowledged).
+    Triggers the RCA swarm asynchronously and posts the PostMortem to Slack.
+
+    Signature verification: set PAGERDUTY_WEBHOOK_SECRET in .env.
+    PagerDuty docs: https://developer.pagerduty.com/docs/ZG9jOjExMDI5NTkz-v3-overview
+    """
+    body = await request.body()
+
+    if PAGERDUTY_WEBHOOK_SECRET:
+        sig = request.headers.get("X-PagerDuty-Signature", "")
+        expected = "v1=" + hmac.new(
+            PAGERDUTY_WEBHOOK_SECRET.encode(), body, hashlib.sha256
+        ).hexdigest()
+        if not hmac.compare_digest(expected, sig.split(",")[0] if sig else ""):
+            raise HTTPException(status_code=401, detail="Invalid PagerDuty signature")
+
+    try:
+        payload = json.loads(body)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON body")
+
+    event = payload.get("event", {})
+    event_type = event.get("event_type", "")
+
+    if event_type not in _TRIGGER_EVENTS:
+        return {"status": "ignored", "event_type": event_type}
+
+    data         = event.get("data", {})
+    pd_id        = data.get("id", "unknown")
+    title        = data.get("title", "")
+    created      = data.get("created_at", "")
+    severity     = _PD_SEVERITY_MAP.get(data.get("severity", "").lower(), "P2")
+    service      = (data.get("service") or {}).get("name") or title.split()[0] or "unknown-svc"
+    incident_time = created or "now"
+    # Accept optional jira_project in payload details or custom field; default LOG4J2 for Apache projects
+    details      = data.get("details") or {}
+    jira_project = details.get("jira_project") or payload.get("jira_project") or "LOG4J2"
+
+    log.info("PagerDuty %s: %s (%s) sev=%s jira=%s", event_type, service, pd_id, severity, jira_project)
+    asyncio.create_task(_run_pagerduty_incident(service, incident_time, severity, pd_id, jira_project))
+
+    return {"status": "accepted", "pd_incident_id": pd_id, "service": service, "severity": severity}
+
+
 @app.post("/slack/analyze")
 async def slack_analyze(request: Request):
     body = await request.body()
@@ -164,14 +293,3 @@ async def slack_analyze(request: Request):
     asyncio.create_task(_run_and_notify(service, incident_time, severity, response_url))
     return {"response_type": "in_channel", "text": f":hourglass: Analyzing `{service}` ({severity})..."}
 
-
-# ── Startup log ───────────────────────────────────────────────────────────────
-
-@app.on_event("startup")
-async def _startup():
-    if not API_KEY:
-        log.warning("API_KEY not set — /analyze is unauthenticated. Set API_KEY in .env for production.")
-    else:
-        log.info("API key auth enabled on /analyze.")
-    if not SLACK_SIGNING_SECRET:
-        log.warning("SLACK_SIGNING_SECRET not set — /slack/analyze accepts unsigned requests.")

@@ -46,19 +46,98 @@ MCP_DIR = Path(__file__).parent.parent / "mcp_servers"
 # Orchestrator
 
 def _compute_usage(messages: list[dict]) -> dict:
-    """Estimate token usage and cost from GroupChat message list."""
-    total_chars = sum(len(m.get("content") or "") for m in messages)
-    estimated_tokens = total_chars // 4
+    """Count tokens with tiktoken (cl100k_base); char/4 fallback if tiktoken absent."""
+    text_parts = [m.get("content") or "" for m in messages]
+    try:
+        import tiktoken
+        enc = tiktoken.get_encoding("cl100k_base")
+        total_tokens = sum(len(enc.encode(t)) for t in text_parts)
+    except ImportError:
+        total_tokens = sum(len(t) for t in text_parts) // 4
     # Groq Llama-3.3-70B pricing: $0.59/1M input, $0.79/1M output (~75/25 split)
     estimated_cost = round(
-        (estimated_tokens * 0.75 * 0.59 + estimated_tokens * 0.25 * 0.79) / 1_000_000, 6
+        (total_tokens * 0.75 * 0.59 + total_tokens * 0.25 * 0.79) / 1_000_000, 6
     )
     return {
         "total_messages": len(messages),
-        "total_chars": total_chars,
-        "estimated_tokens": estimated_tokens,
+        "estimated_tokens": total_tokens,
         "estimated_cost_usd": estimated_cost,
     }
+
+
+_SPEAKER_ORDER = ["Coordinator", "DevOps_Agent", "SWE_Agent", "PM_Agent", "Critic_Agent"]
+
+
+def _has_pending_tool_calls(groupchat) -> bool:
+    """True if last message contains tool call suggestions not yet responded to."""
+    if not groupchat.messages:
+        return False
+    last = groupchat.messages[-1]
+    # AG2 stores tool calls in "tool_calls" key or as structured content
+    if last.get("tool_calls"):
+        return True
+    # Also check content for the AG2 suggestion pattern
+    content = last.get("content") or ""
+    return "Suggested tool call" in content
+
+
+def _smart_select_speaker(last_speaker, groupchat):
+    """
+    Ordered speaker selection that:
+    1. Returns the same agent when it has pending tool call responses to handle.
+    2. Blocks Critic until DEVOPS_DONE, SWE_DONE, PM_DONE all present.
+
+    Fix: AG2 custom speaker selection fires after tool suggestions but before
+    responses — without this guard, the wrong agent receives tool results.
+    """
+    agents_by_name = {a.name: a for a in groupchat.agents}
+
+    # Critical: if last agent has pending tool calls, it must speak again to handle them
+    if _has_pending_tool_calls(groupchat):
+        return last_speaker
+
+    full_text = " ".join(m.get("content") or "" for m in groupchat.messages)
+    has_devops = "DEVOPS_DONE" in full_text
+    has_swe    = "SWE_DONE"    in full_text
+    has_pm     = "PM_DONE"     in full_text
+    all_ready  = has_devops and has_swe and has_pm
+
+    if last_speaker.name not in _SPEAKER_ORDER:
+        return agents_by_name.get("DevOps_Agent")
+
+    idx       = _SPEAKER_ORDER.index(last_speaker.name)
+    next_name = _SPEAKER_ORDER[(idx + 1) % len(_SPEAKER_ORDER)]
+
+    if next_name == "Critic_Agent" and not all_ready:
+        if not has_devops:
+            return agents_by_name["DevOps_Agent"]
+        if not has_swe:
+            return agents_by_name["SWE_Agent"]
+        return agents_by_name["PM_Agent"]
+
+    return agents_by_name.get(next_name)
+
+
+def _should_use_swarm(service: str, incident_time: str, severity: str, context: str = "") -> bool:
+    """
+    Adaptive routing via learned LogisticRegression classifier (swarm/routing.py).
+
+    Trained on ablation_v2_n4.json (N=8 scenarios × 4 repeats). Swarm is preferred
+    when the classifier detects JNDI/Log4Shell-type CVEs with multi-source evidence
+    alignment. Baseline preferred for resource/infra/ambiguous incidents.
+
+    Falls back to keyword heuristic if scikit-learn is unavailable or ablation
+    data has not been generated yet.
+    """
+    from swarm.routing import should_use_swarm as _route
+    use_swarm, confidence, method = _route(service, severity, context)
+    if method == "classifier":
+        print(
+            f"[routing] {service} → {'swarm' if use_swarm else 'baseline'} "
+            f"(classifier p={confidence:.2f})",
+            file=sys.stderr,
+        )
+    return use_swarm
 
 
 async def run_incident_analysis(
@@ -163,7 +242,7 @@ async def run_incident_analysis(
             agents=[coordinator, devops_agent, swe_agent, pm_agent, critic_agent],
             messages=[],
             max_round=30,
-            speaker_selection_method="round_robin",
+            speaker_selection_method=_smart_select_speaker,
         )
 
         chat_manager = GroupChatManager(

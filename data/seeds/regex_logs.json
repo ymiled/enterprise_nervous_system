@@ -1,0 +1,42 @@
+[
+  {
+    "id": "regex-0001",
+    "timestamp": "2019-07-02T13:42:05Z",
+    "service": "waf-svc",
+    "level": "ERROR",
+    "trace_id": "t-regex-0001",
+    "logger": "com.company.waf.LuaRegexEngine",
+    "message": "LuaRegexEngine CPU 100% on all cores: catastrophic backtracking in WAF rule pattern '(?:(?:\\s|//.*|/\\*(?!.*?\\*/|$))*)' matching HTTP request body. Worker threads exhausted. WAF rule deployed at 13:41:48 causes O(n^2) matching on large POST bodies.",
+    "env": "production"
+  },
+  {
+    "id": "regex-0002",
+    "timestamp": "2021-07-02T13:42:10Z",
+    "service": "waf-svc",
+    "level": "ERROR",
+    "trace_id": "t-regex-0002",
+    "logger": "com.company.waf.LuaRegexEngine",
+    "message": "All HTTP traffic being dropped: LuaRegexEngine worker pool exhausted. 100% CPU on all 72 vCPUs. Every inbound HTTP request triggers catastrophic backtracking regex evaluation. Error rate: 100% across all customers globally. New WAF rule 100074 introduced at 13:41Z.",
+    "env": "production"
+  },
+  {
+    "id": "regex-0003",
+    "timestamp": "2019-07-02T13:43:00Z",
+    "service": "waf-svc",
+    "level": "ERROR",
+    "trace_id": "t-regex-0003",
+    "logger": "com.company.waf.RuleProcessor",
+    "message": "RuleProcessor: global customer impact. All PoPs (194 cities) affected. WAF rule 100074 deployed via automated push system at 13:41:48 UTC without staging validation for catastrophic backtracking. Rollback initiated.",
+    "env": "production"
+  },
+  {
+    "id": "regex-0004",
+    "timestamp": "2019-07-02T13:49:00Z",
+    "service": "waf-svc",
+    "level": "INFO",
+    "trace_id": "t-regex-0004",
+    "logger": "com.company.waf.RuleProcessor",
+    "message": "WAF rule 100074 rollback complete. LuaRegexEngine CPU normalising. Traffic flowing. Impact duration: 27 minutes. Root cause: regex rule with unbounded quantifiers over HTTP body caused exponential matching time. Fix: disable global WAF rule push until catastrophic backtracking detection added to CI.",
+    "env": "production"
+  }
+]

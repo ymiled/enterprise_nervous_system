@@ -1,0 +1,22 @@
+[
+  {
+    "id": "CERT-101",
+    "title": "auth-svc TLS certificate expired — all auth endpoints 503",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-06-15",
+    "description": "Wildcard TLS cert for auth.company.com expired at 2024-06-15T02:00:00Z. cert-manager auto-renewal was not configured. All downstream services that depend on auth-svc (order-svc, payment-svc, inventory-svc) are now unable to authenticate. 100% 503 rate. Renewal commit f1a2b3c4 deployed at 02:45Z restored service.",
+    "url": "https://jira.company.com/browse/CERT-101",
+    "labels": ["certificate", "TLS", "auth-svc", "production-incident", "P0"]
+  },
+  {
+    "id": "CERT-102",
+    "title": "Add cert-manager auto-renewal and 30-day expiry alerting for all production certs",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-06-15",
+    "description": "Post-incident action: configure cert-manager to auto-renew all production TLS certificates 30 days before expiry. Add PagerDuty alert at T-30d and T-7d. Audit all other services for manually managed certificates.",
+    "url": "https://jira.company.com/browse/CERT-102",
+    "labels": ["cert-manager", "automation", "platform", "reliability"]
+  }
+]

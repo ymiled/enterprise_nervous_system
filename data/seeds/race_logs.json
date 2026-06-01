@@ -1,0 +1,52 @@
+[
+  {
+    "id": "race-0001",
+    "timestamp": "2024-08-20T09:00:05Z",
+    "service": "inventory-svc",
+    "level": "ERROR",
+    "trace_id": "t-race-0001",
+    "logger": "com.mysql.cj.jdbc.exceptions.CommunicationsException",
+    "message": "Deadlock found when trying to get lock; try restarting transaction. Table: inventory_items. Threads involved: TX-4401 (reserve_stock), TX-4402 (reserve_stock). Both transactions waiting on each other's row locks. Deadlock rate: 240/min.",
+    "env": "production"
+  },
+  {
+    "id": "race-0002",
+    "timestamp": "2024-08-20T09:00:07Z",
+    "service": "inventory-svc",
+    "level": "ERROR",
+    "trace_id": "t-race-0002",
+    "logger": "com.mysql.cj.jdbc.exceptions.CommunicationsException",
+    "message": "SQLSTATE[40001]: Serialization failure: 1213 Deadlock found. reserve_stock() acquires row locks in non-deterministic order across inventory_items and inventory_reservations tables. Flash sale traffic: 1,200 concurrent /reserve requests.",
+    "env": "production"
+  },
+  {
+    "id": "race-0003",
+    "timestamp": "2024-08-20T09:00:10Z",
+    "service": "inventory-svc",
+    "level": "ERROR",
+    "trace_id": "t-race-0003",
+    "logger": "com.company.inventory.StockReservationService",
+    "message": "StockReservationService.reserve() deadlock retry budget exhausted after 3 attempts. POST /v1/inventory/reserve returning 500. Error rate 67%. Flash sale checkout broken.",
+    "env": "production"
+  },
+  {
+    "id": "race-0004",
+    "timestamp": "2024-08-20T09:00:15Z",
+    "service": "inventory-svc",
+    "level": "WARN",
+    "trace_id": "t-race-0004",
+    "logger": "com.company.inventory.StockReservationService",
+    "message": "Deadlock pattern: TX acquires inventory_items lock first THEN inventory_reservations. Concurrent TX acquires inventory_reservations first THEN inventory_items. Classic lock-order inversion. Fix: enforce consistent lock acquisition order or use SELECT FOR UPDATE with index hint.",
+    "env": "production"
+  },
+  {
+    "id": "race-0005",
+    "timestamp": "2024-08-20T09:15:00Z",
+    "service": "inventory-svc",
+    "level": "INFO",
+    "trace_id": "t-race-0005",
+    "logger": "com.company.inventory.StockReservationService",
+    "message": "Hotfix deployed: reserve_stock() now acquires locks in deterministic order (inventory_items first, then inventory_reservations). Deadlock rate: 0/min. Flash sale checkout recovering.",
+    "env": "production"
+  }
+]

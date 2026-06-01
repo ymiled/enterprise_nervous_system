@@ -1,0 +1,16 @@
+[
+  {
+    "sha": "c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3",
+    "sha_short": "c4d5e6f7",
+    "message": "feat: add circuit breaker for ApiConnectionException (Stripe degradation)\n\nStripe outage 2024-11-08: ApiConnectionException timeouts caused 87% payment failures.\ncom.stripe.exception.ApiConnectionException — no circuit breaker existed.\nAdded Resilience4j circuit breaker (threshold: 50% errors/60s) with queue-based\nfallback. Zero transactions lost. Stripe connectivity now fault-tolerant.\nReviewed-by: payments-team",
+    "author": "payments-bot",
+    "date": "2024-11-08T20:00:00Z",
+    "files_changed": [
+      "src/main/java/com/company/payment/circuit/StripeCircuitBreaker.java",
+      "src/main/resources/application.yaml",
+      "src/main/java/com/company/payment/queue/PaymentQueueProcessor.java"
+    ],
+    "diff": "// Fix: com.stripe.exception.ApiConnectionException with no circuit breaker\n// Adds Resilience4j circuit breaker for Stripe API calls",
+    "url": "https://github.com/company/payment-svc/commit/c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3"
+  }
+]

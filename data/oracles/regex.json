@@ -1,0 +1,14 @@
+{
+  "_comment": "Based on Cloudflare WAF Lua regex catastrophic backtracking outage 2019-07-02. https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/",
+  "_source": "https://blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019/",
+  "incident": "New WAF rule with unbounded alternation regex caused catastrophic backtracking in Lua regex engine, exhausting all CPU on all workers globally for 27 minutes",
+  "primary_fix_commit": {
+    "sha": "d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1",
+    "sha_prefix_8": "d2e3f4a5",
+    "date": "2019-07-02",
+    "message": "fix: rollback WAF rule 100074 — LuaRegexEngine catastrophic backtracking"
+  },
+  "ticket_ids": ["WAF-201", "WAF-202"],
+  "logger_keywords": ["com.company.waf.LuaRegexEngine"],
+  "root_cause_keywords": ["catastrophic backtracking", "regex", "LuaRegexEngine"]
+}

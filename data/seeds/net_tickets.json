@@ -1,0 +1,22 @@
+[
+  {
+    "id": "NET-301",
+    "title": "Redis cluster split-brain caused by AZ network partition — order-svc 100% error rate for 5 min",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2024-09-03",
+    "description": "Transit gateway route table update at 10:57Z withdrew route for subnet 10.1.2.0/24, isolating Redis nodes in us-east-1a from us-east-1b. Both AZ halves elected a Redis primary causing split-brain. order-svc cart writes failed 100% for 5m. Reverted by commit b7c8d9e0. Service restored at 11:05Z.",
+    "url": "https://jira.company.com/browse/NET-301",
+    "labels": ["network-partition", "redis", "split-brain", "order-svc", "production-incident"]
+  },
+  {
+    "id": "NET-302",
+    "title": "Add AZ connectivity validation to infrastructure change pipeline",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-09-03",
+    "description": "Add pre-apply Terraform validation that checks cross-AZ connectivity for critical subnets (Redis, DB, Kafka). Gate network changes on health check passing. Add runbook for Redis split-brain recovery.",
+    "url": "https://jira.company.com/browse/NET-302",
+    "labels": ["terraform", "network", "platform", "runbook"]
+  }
+]

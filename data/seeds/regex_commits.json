@@ -1,0 +1,16 @@
+[
+  {
+    "sha": "d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1",
+    "sha_short": "d2e3f4a5",
+    "message": "fix: rollback WAF rule 100074 — LuaRegexEngine catastrophic backtracking\n\nRule 100074 deployed at 13:41Z caused catastrophic backtracking in LuaRegexEngine.\nPattern '(?:(?:\\s|//.*|/\\*(?!.*?\\*/|$))*)' O(n^2) on HTTP body — 100% CPU on all workers.\n27-minute global outage. Rollback at 13:49Z. Disable automated WAF rule push.\nAdd catastrophic backtracking detector to CI before any new rule deployment.\nSource: based on Cloudflare WAF Lua regex outage 2019-07-02.\nReviewed-by: security-team",
+    "author": "waf-bot",
+    "date": "2019-07-02T13:49:00Z",
+    "files_changed": [
+      "waf/rules/100074_xss_detection.lua",
+      "ci/waf-rule-validator.py",
+      "waf/deploy/rule_push.sh"
+    ],
+    "diff": "// Rollback: LuaRegexEngine catastrophic backtracking from unbounded quantifiers\n// Add: regex complexity checker using rexploiter before merge",
+    "url": "https://github.com/company/waf-svc/commit/d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0e1"
+  }
+]

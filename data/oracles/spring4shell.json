@@ -1,0 +1,26 @@
+{
+  "_source": "GitHub Advisory Database: https://github.com/advisories/GHSA-36p3-wjmg-h94x",
+  "_ghsa": "GHSA-36p3-wjmg-h94x",
+  "_comment": "CVE-2022-22965 Spring4Shell. Fix commit SHA fetched directly from GHSA API.",
+  "incident": "Spring4Shell (CVE-2022-22965): RCE via DataBinder class attribute manipulation on JDK 9+ with Tomcat",
+  "cve_id": "CVE-2022-22965",
+  "severity": "critical",
+  "ecosystem": "maven",
+  "package": "org.springframework:spring-beans",
+  "patched_version": "5.3.18 / 5.2.20.RELEASE",
+  "primary_fix_commit": {
+    "sha": "002546b3e4b8d791ea6acccb81eb3168f51abb15",
+    "sha_prefix_8": "002546b3",
+    "date": "2022-03-31",
+    "message": "Disallow ClassLoader access via DataBinder (CVE-2022-22965 / Spring4Shell)",
+    "url": "https://github.com/spring-projects/spring-framework/commit/002546b3e4b8d791ea6acccb81eb3168f51abb15"
+  },
+  "ticket_ids": ["SPRING-101", "SPRING-102"],
+  "logger_keywords": ["org.springframework.web.bind.WebDataBinder"],
+  "root_cause_keywords": ["DataBinder", "classLoader", "Spring4Shell"],
+  "references": [
+    "https://nvd.nist.gov/vuln/detail/CVE-2022-22965",
+    "https://github.com/spring-projects/spring-framework/commit/002546b3e4b8d791ea6acccb81eb3168f51abb15",
+    "https://spring.io/blog/2022/03/31/spring-framework-rce-early-announcement"
+  ]
+}

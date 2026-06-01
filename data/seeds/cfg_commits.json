@@ -1,0 +1,27 @@
+[
+  {
+    "sha": "a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8",
+    "sha_short": "a9b0c1d2",
+    "message": "fix: bridge code for JobDistributor column type mismatch after schema migration\n\nV88 migration changed job_type column from text to integer. Strict schema validation\nin JobDistributor fails on mixed-type rows written during rollout window.\nFix: deploy bridge code (v2.4.2) that reads both integer and text job_type values.\nRelated to: com.company.jobs.distributor.JobDistributor error 42804.\nReviewed-by: platform-team",
+    "author": "jobs-bot",
+    "date": "2021-11-08T14:30:00Z",
+    "files_changed": [
+      "src/main/java/com/company/jobs/distributor/JobDistributor.java",
+      "src/main/resources/db/migration/V89__compat_job_type_bridge.sql"
+    ],
+    "diff": "// Fix: JobDistributor strict schema validation fails after V88 migration\n// Accept both integer and text job_type column during transition",
+    "url": "https://github.com/company/jobs-svc/commit/a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8"
+  },
+  {
+    "sha": "b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9",
+    "sha_short": "b0c1d2e3",
+    "message": "feat: schema migration V88 - change job_type column type from text to integer\n\nPart of jobs-svc v2.4.1 deploy. Caused JobDistributor deserialization failures\nfor rows written during mixed-code rollout window.\nRoot issue: strict schema validation in distributor does not tolerate type migration.",
+    "author": "jobs-bot",
+    "date": "2021-11-08T14:19:00Z",
+    "files_changed": [
+      "src/main/resources/db/migration/V88__change_job_type_to_integer.sql"
+    ],
+    "diff": "",
+    "url": "https://github.com/company/jobs-svc/commit/b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9"
+  }
+]

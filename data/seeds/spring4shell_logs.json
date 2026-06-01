@@ -1,0 +1,42 @@
+[
+  {
+    "id": "spring-0001",
+    "timestamp": "2022-03-31T10:00:05Z",
+    "service": "api-svc",
+    "level": "ERROR",
+    "trace_id": "t-spring-0001",
+    "logger": "org.springframework.web.bind.WebDataBinder",
+    "message": "WebDataBinder: class.module.classLoader accessed via DataBinder parameter binding (CVE-2022-22965). Attacker set class.module.classLoader.resources.context.parent.pipeline.first.pattern=%%{c2}i_%%{c1}i_spring_shell payload. Spring4Shell exploit via Tomcat logging configuration. JDK 9+, Tomcat WAR deployment confirmed.",
+    "env": "production"
+  },
+  {
+    "id": "spring-0002",
+    "timestamp": "2022-03-31T10:00:10Z",
+    "service": "api-svc",
+    "level": "ERROR",
+    "trace_id": "t-spring-0002",
+    "logger": "org.springframework.web.bind.WebDataBinder",
+    "message": "DataBinder allowed binding of class.classLoader property chain, exposing ClassLoader to attacker control. Tomcat access log pattern overwritten. spring-webmvc 5.3.16 on JDK 17 — vulnerable to Spring4Shell (CVE-2022-22965). Upgrade to 5.3.18 (fix commit 002546b3) required.",
+    "env": "production"
+  },
+  {
+    "id": "spring-0003",
+    "timestamp": "2022-03-31T10:00:20Z",
+    "service": "api-svc",
+    "level": "ERROR",
+    "trace_id": "t-spring-0003",
+    "logger": "com.company.api.security.ThreatMonitor",
+    "message": "ThreatMonitor: Spring4Shell exploit attempt detected on POST /api/upload. WebDataBinder class.module.classLoader parameter injection. 234 requests from 203.0.113.0/24. api-svc deployed as WAR on Tomcat 9.0.60 with JDK 17 — confirmed Spring4Shell attack surface.",
+    "env": "production"
+  },
+  {
+    "id": "spring-0004",
+    "timestamp": "2022-03-31T10:05:00Z",
+    "service": "api-svc",
+    "level": "INFO",
+    "trace_id": "t-spring-0004",
+    "logger": "org.springframework.web.bind.WebDataBinder",
+    "message": "Spring Framework patched to 5.3.18. WebDataBinder now blocks class.classLoader access via disallowed field patterns. CVE-2022-22965 mitigated. Fix commit 002546b3 applied.",
+    "env": "production"
+  }
+]

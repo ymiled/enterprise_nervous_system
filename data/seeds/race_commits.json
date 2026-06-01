@@ -1,0 +1,15 @@
+[
+  {
+    "sha": "d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4",
+    "sha_short": "d5e6f7a8",
+    "message": "fix: deterministic lock order in reserve_stock — CommunicationsException deadlock\n\nFlash sale: CommunicationsException SQLSTATE[40001] deadlocks at 240/min.\nRoot: com.mysql.cj.jdbc.exceptions.CommunicationsException — lock-order inversion\nbetween inventory_items and inventory_reservations tables at 1200 concurrent requests.\nFix: always acquire inventory_items lock first (ORDER BY item_id ASC).\nReviewed-by: inventory-team",
+    "author": "inventory-bot",
+    "date": "2024-08-20T09:10:00Z",
+    "files_changed": [
+      "src/main/java/com/company/inventory/StockReservationService.java",
+      "src/main/resources/db/migration/V42__add_reserve_stock_index.sql"
+    ],
+    "diff": "// Fix: CommunicationsException deadlock in reserve_stock()\n// Lock order: inventory_items first, inventory_reservations second",
+    "url": "https://github.com/company/inventory-svc/commit/d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4"
+  }
+]

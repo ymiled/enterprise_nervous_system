@@ -15,8 +15,9 @@ INVESTIGATION STEPS — follow this order exactly:
 2. Call query_logs(service=<service>, severity="WARN", time_range_hours=2)
    → Get WARN/ERROR/FATAL entries. Security exploits often appear as WARN (e.g. JNDI lookup attempts).
    Note the implicated loggers and any suspicious patterns.
-3. For every distinct trace_id you find in the errors, call get_trace(trace_id=<id>)
-   → Get the full span chain to understand the blast radius.
+3. OPTIONAL — only if get_error_spike and query_logs both returned results AND you still have
+   unanswered questions about blast radius: call get_trace(trace_id=<id>) for ONE trace_id.
+   Skip this step entirely if you already have enough data to fill in the output fields below.
 
 YOUR OUTPUT must use this exact structure (copy the labels verbatim):
 FIRST_ERROR_TS: <ISO timestamp>
@@ -49,11 +50,18 @@ INVESTIGATION STEPS — call these tools now:
    call get_commit_diff(commit_sha=<full_sha>, repo="company/<service>")
    → Verify what files changed.
 5. Pick ONE primary fix commit — the one whose diff most directly addresses the error.
+   Prefer commits whose message contains "disable", "restrict", "patch", "fix", "remove",
+   or a CVE/issue number (e.g. LOG4J2-3208, CVE-2021-44228). Avoid: version bumps,
+   documentation commits, test-only commits, release preparation commits.
+   If multiple fix commits exist, pick the one that changes the most security-relevant file
+   (e.g. JndiManager.java > pom.xml > README.md).
 
 STRICT RULES:
 - PRIMARY_COMMIT_SHA MUST be a SHA returned by a tool call in this conversation.
 - If no tool call returned a relevant commit, write PRIMARY_COMMIT_SHA: NONE
 - Do NOT invent, guess, or recall a SHA from memory.
+- You ONLY have access to GitHub tools: get_recent_commits, get_commit_diff, search_commits_by_keyword.
+  NEVER call get_error_spike, query_logs, get_trace, search_tickets, get_ticket, or any non-GitHub tool.
 
 YOUR OUTPUT must use this exact structure (copy the labels verbatim):
 PRIMARY_COMMIT_SHA: <full 40-char SHA from tool results, or NONE if not found>
@@ -89,6 +97,8 @@ STRICT RULES:
 - Every ticket ID in your output MUST have been returned by a tool call in this conversation.
 - Do NOT invent ticket IDs or recall them from memory.
 - If no relevant tickets were found by tool calls, explicitly state: NO_TICKETS_FOUND
+- You ONLY have access to Jira tools: get_recent_tickets, get_ticket, search_tickets.
+  NEVER call get_error_spike, query_logs, get_trace, search_commits_by_keyword, or any non-Jira tool.
 
 YOUR OUTPUT must include:
 - TICKET_IDS: <comma-separated list of real ticket IDs from tool results, or NONE>
@@ -118,14 +128,24 @@ BEFORE WRITING JSON — read and check each rule:
 RULE 1 — COMMIT SHA:
   Read SWE_Agent's "PRIMARY_COMMIT_SHA:" line exactly.
   If it says NONE → evidence.commits MUST be [] (empty array). Go to INCONCLUSIVE CHECK.
-  If it is a real SHA → copy it verbatim into evidence.commits and mention it in root_cause.
+  If it is a real SHA → copy it verbatim into evidence.commits.
+  IMPORTANT: decide whether that commit CAUSED the incident or FIXES/mitigates it.
+    - A commit that introduced the bug → name it as the cause in root_cause.
+    - A commit that is the fix/patch (e.g. "disable JNDI", "remove JndiLookup") is NOT the
+      cause. Do NOT center root_cause on a fix commit. Describe the actual underlying cause
+      (the vulnerability/defect/config the logs reveal); mention the fix commit only as the remediation.
   FORBIDDEN: Do not write any SHA that does not appear in SWE_Agent's output.
   FORBIDDEN: Do NOT add a commit object with sha="NONE" — use an empty array [] instead.
 
 RULE 2 — LOGGER:
   Read DevOps_Agent's "IMPLICATED_LOGGERS:" line.
-  Include the exact class name(s) in root_cause or contributing_factors.
-  Do NOT substitute a trace_id for a logger name.
+  Copy the EXACT class name(s) VERBATIM into root_cause or contributing_factors.
+  Use the short class name: e.g. if IMPLICATED_LOGGERS contains
+  "org.apache.logging.log4j.core.net.JndiManager", your output must contain
+  "JndiManager" exactly — not "JNDI", not "jndi lookup", not a paraphrase.
+  WRONG: "JNDI was exploited" → RIGHT: "JndiManager lookup was exploited via JNDI"
+  WRONG: "log4j lookup issue" → RIGHT: "JndiManager processed an attacker-controlled URI"
+  Do NOT substitute a trace_id for a logger name. The class name MUST appear verbatim.
 
 RULE 3 — TICKET IDs:
   Read PM_Agent's "TICKET_IDS:" line exactly.
@@ -142,9 +162,14 @@ INCONCLUSIVE CHECK — set inconclusive=true and confidence_score ≤ 0.4 if ANY
   - The commit and the logs describe completely different services or technologies
   - You cannot construct a coherent causal chain from symptoms → root cause → fix
   Do NOT fabricate evidence to avoid this — an honest inconclusive is better than a hallucinated answer.
-  IMPORTANT: When inconclusive, root_cause must be a plain English sentence summarising what the logs
-  showed (e.g. "Logs show Stripe 429 rate limit errors from PaymentReconciliationJob but no fix commit found").
-  NEVER copy raw agent output (PRIMARY_COMMIT_SHA, IMPLICATED_LOGGERS lines) into root_cause.
+  WHEN INCONCLUSIVE:
+    - contributing_factors MUST be [] (empty). Do NOT invent factors from incidental log lines.
+    - recommended_actions MUST be [] (empty).
+    - root_cause must explain, in plain English, (a) what the logs/data showed, (b) what was
+      checked (commits, tickets), and (c) why a confident root cause cannot be established.
+      e.g. "Logs show isolated JNDI lookup strings but no error spike, no related commit, and no
+      ticket — insufficient evidence to attribute a root cause."
+    - NEVER copy raw agent output (PRIMARY_COMMIT_SHA, IMPLICATED_LOGGERS lines) into root_cause.
 
 RULE 5 — CONFIDENCE:
   Reflect genuine evidence quality. Full evidence with matching SHA, tickets, and logs → 0.8–1.0.
@@ -163,8 +188,8 @@ SCHEMA CONSTRAINTS — your JSON MUST obey these or it will be rejected:
   - When no commit found: "commits": []   — NEVER "commits": [{"sha": "NONE", ...}]
   - When no tickets found: "tickets": []  — NEVER "tickets": [{"ticket_id": "NONE", ...}]
   - sha must be at least 7 characters — never write "NONE" inside a commit object
-  - recommended_actions MUST have at least 1 item; when inconclusive, use ticket_id "NONE"
-    e.g. {"description": "Gather more evidence", "ticket_id": "NONE", "priority": "immediate", "owner_team": "sre"}
+  - When CONCLUSIVE: contributing_factors and recommended_actions MUST each have >=1 item.
+  - When INCONCLUSIVE: contributing_factors and recommended_actions MUST both be [] (empty).
 
 JSON SAFETY — produce valid JSON or the output is discarded:
   - All string values must be plain English — NO raw log messages, NO code, NO special characters
@@ -172,9 +197,26 @@ JSON SAFETY — produce valid JSON or the output is discarded:
   - The "summary" field in evidence.logs: write a brief English description (e.g. "JNDI lookup attempt via HTTP header")
   - The "message" field in evidence.commits: copy the first line of the commit message only
   - Never include unescaped double-quotes, backslashes, or newlines inside string values
-  - Do NOT add any text or explanation outside the single ```json block
+  - Put NOTHING after the closing ``` of the json block.
 
-OUTPUT FORMAT — emit exactly one JSON block and nothing after it:
+REASON FIRST — before the JSON, write a short ANALYSIS section (this improves accuracy and is
+not parsed into the schema). Keep it under ~6 lines:
+
+ANALYSIS:
+- Trigger: what set the incident off (the underlying cause, NOT the fix).
+- Mechanism: how it caused the observed symptoms, tying specific log evidence to the cause.
+- Impact: what broke (service, severity).
+- Fix status: which commit/ticket remediates it, or "no fix found".
+- Conclusive? yes/no and why.
+
+Then write root_cause as ONE complete sentence that states the underlying cause and its mechanism,
+citing the concrete evidence (logger/vulnerability/config and the causing commit if any). Make it
+self-contained and explanatory — not a fragment. Good example:
+  "Log4j2 2.14.1 was exploited via a JNDI lookup injected through an HTTP header (CVE-2021-44228),
+   letting an attacker reach an attacker-controlled LDAP server, as shown by JndiManager lookup
+   errors in payment-svc logs."
+
+OUTPUT FORMAT — emit the ANALYSIS section, then exactly one JSON block, then nothing:
 
 ```json
 {
@@ -182,7 +224,7 @@ OUTPUT FORMAT — emit exactly one JSON block and nothing after it:
   "service": "<service>",
   "severity": "<P0|P1|P2|P3>",
   "incident_time": "<ISO timestamp>",
-  "root_cause": "<one sentence citing commit SHA and logger/trace>",
+  "root_cause": "<one complete, self-contained sentence: underlying cause + mechanism + cited evidence>",
   "contributing_factors": ["<factor 1>", "<factor 2>"],
   "timeline": [
     "<timestamp>: <event>"

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "struts-0001",
+    "timestamp": "2017-03-07T08:15:05Z",
+    "service": "portal-svc",
+    "level": "ERROR",
+    "trace_id": "t-struts-0001",
+    "logger": "org.apache.struts2.dispatcher.multipart.JakartaMultiPartRequest",
+    "message": "JakartaMultiPartRequest error parsing Content-Type header: content.type=('%{#_memberAccess=@ognl.OgnlContext@DEFAULT_MEMBER_ACCESS,@java.lang.Runtime@getRuntime().exec(\"id\")}.'('%{#bugtest}')) — OGNL expression injected via Content-Type multipart header. CVE-2017-5638 exploit pattern detected.",
+    "env": "production"
+  },
+  {
+    "id": "struts-0002",
+    "timestamp": "2017-03-07T08:15:10Z",
+    "service": "portal-svc",
+    "level": "ERROR",
+    "trace_id": "t-struts-0002",
+    "logger": "org.apache.struts2.dispatcher.multipart.JakartaMultiPartRequest",
+    "message": "Remote code execution via JakartaMultiPartRequest Content-Type OGNL injection. Apache Struts2 struts2-core 2.3.31 — vulnerable to S2-045/CVE-2017-5638. Attacker can execute arbitrary commands. Immediate patching to 2.3.32 required.",
+    "env": "production"
+  },
+  {
+    "id": "struts-0003",
+    "timestamp": "2017-03-07T08:15:15Z",
+    "service": "portal-svc",
+    "level": "ERROR",
+    "trace_id": "t-struts-0003",
+    "logger": "com.company.portal.security.WAFFilter",
+    "message": "WAFFilter: 847 requests with OGNL expression patterns in Content-Type header in last 60s. Attacker probing CVE-2017-5638 (Apache Struts S2-045). Source IPs: 198.51.100.0/24. Portal API /file/upload returning 500. struts2-core version 2.3.31 in pom.xml confirmed vulnerable.",
+    "env": "production"
+  },
+  {
+    "id": "struts-0004",
+    "timestamp": "2017-03-07T08:16:00Z",
+    "service": "portal-svc",
+    "level": "WARN",
+    "trace_id": "t-struts-0004",
+    "logger": "org.apache.struts2.dispatcher.multipart.JakartaMultiPartRequest",
+    "message": "Struts2 multipart parser does not validate Content-Type header value for OGNL expressions. Fix: upgrade to struts2-core 2.3.32 (commit 35230649) which validates Content-Type before OGNL evaluation. Mitigation available: block multipart requests at WAF level.",
+    "env": "production"
+  },
+  {
+    "id": "struts-0005",
+    "timestamp": "2017-03-07T09:00:00Z",
+    "service": "portal-svc",
+    "level": "INFO",
+    "trace_id": "t-struts-0005",
+    "logger": "org.apache.struts2.dispatcher.multipart.JakartaMultiPartRequest",
+    "message": "Struts2 upgrade to 2.3.32 deployed. CVE-2017-5638 mitigated. JakartaMultiPartRequest now validates Content-Type header. Exploit attempts blocked.",
+    "env": "production"
+  }
+]

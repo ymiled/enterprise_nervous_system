@@ -1,0 +1,22 @@
+[
+  {
+    "id": "PAY-501",
+    "title": "Stripe API degradation caused 87% payment failure rate for 6 minutes",
+    "status": "Resolved",
+    "priority": "Critical",
+    "created": "2024-11-08",
+    "description": "Stripe API outage 17:58–18:04 UTC caused ApiConnectionException timeouts on all /v1/charges calls. payment-svc circuit breaker was not implemented — every request waited 30s before failing. 847 transactions queued. Post-incident: added Resilience4j circuit breaker (commit c4d5e6f7) with queue-based fallback. Zero transactions lost.",
+    "url": "https://jira.company.com/browse/PAY-501",
+    "labels": ["stripe", "third-party", "circuit-breaker", "payment-svc", "production-incident"]
+  },
+  {
+    "id": "PAY-502",
+    "title": "Implement retry budget and exponential backoff for all third-party API calls",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-11-08",
+    "description": "Extend circuit breaker pattern to all third-party integrations (Stripe, Twilio, SendGrid). Add retry budget per service. Publish runbook for third-party API degradation.",
+    "url": "https://jira.company.com/browse/PAY-502",
+    "labels": ["resilience", "third-party", "circuit-breaker", "payments-team"]
+  }
+]

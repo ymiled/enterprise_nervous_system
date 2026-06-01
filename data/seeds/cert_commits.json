@@ -1,0 +1,27 @@
+[
+  {
+    "sha": "f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0",
+    "sha_short": "f1a2b3c4",
+    "message": "fix: renew wildcard TLS certificate for auth.company.com (SSLContextImpl expired)\n\nSSLHandshakeException / SSLContextImpl errors at 02:00Z — cert NotAfter elapsed.\nReplaced expired wildcard cert. Added cert-manager auto-renewal annotation.\nFixes sun.security.ssl.SSLContextImpl PKIX validation failures.\nReviewed-by: platform-team",
+    "author": "platform-bot",
+    "date": "2024-06-15T02:45:00Z",
+    "files_changed": [
+      "k8s/production/auth-svc/tls-secret.yaml",
+      "k8s/production/auth-svc/certificate.yaml"
+    ],
+    "diff": "--- k8s/production/auth-svc/certificate.yaml\n@@ -5,6 +5,7 @@\n+  # Renewed: sun.security.ssl.SSLContextImpl PKIX errors on expired cert\n   renewBefore: 720h\n+  issuerRef:\n+    name: letsencrypt-prod\n   secretName: auth-svc-tls",
+    "url": "https://github.com/company/platform/commit/f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0"
+  },
+  {
+    "sha": "e2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1",
+    "sha_short": "e2a3b4c5",
+    "message": "chore: add cert-manager auto-renewal and 30-day expiry alerting\n\nPrevents recurrence of SSLContextImpl / SSLHandshakeException from expired certs.\nReviewed-by: platform-team",
+    "author": "platform-bot",
+    "date": "2024-06-15T03:00:00Z",
+    "files_changed": [
+      "monitoring/alerts/cert-expiry.yaml"
+    ],
+    "diff": "",
+    "url": "https://github.com/company/platform/commit/e2a3b4c5d6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1"
+  }
+]

@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for database deadlock / race condition incident type.",
+  "incident": "Flash sale deadlock: reserve_stock() lock-order inversion at high concurrency",
+  "primary_fix_commit": {
+    "sha": "d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4",
+    "sha_prefix_8": "d5e6f7a8",
+    "date": "2024-08-20",
+    "message": "fix: enforce deterministic lock order in reserve_stock to prevent deadlock"
+  },
+  "ticket_ids": ["INV-401", "INV-402"],
+  "logger_keywords": ["com.mysql.cj.jdbc.exceptions.CommunicationsException"],
+  "root_cause_keywords": ["deadlock", "lock", "race condition"]
+}

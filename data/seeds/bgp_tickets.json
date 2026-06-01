@@ -1,0 +1,22 @@
+[
+  {
+    "id": "NET-401",
+    "title": "Global BGP route withdrawal — all services unreachable for 6h32m",
+    "status": "Resolved",
+    "priority": "Critical",
+    "created": "2021-10-04",
+    "description": "Backbone router maintenance config change accidentally withdrew all BGP prefix announcements at 15:39Z. DNS unreachable globally. 0/24 BGP peers active. Remote remediation impossible — internal tools also unreachable. Physical datacenter access required. Routes restored manually at 22:12Z. Based on Facebook/Meta BGP withdrawal incident 2021-10-04 (engineering.fb.com/2021/10/05/networking-traffic/outage-details/).",
+    "url": "https://jira.company.com/browse/NET-401",
+    "labels": ["bgp", "network", "dns", "global-outage", "production-incident"]
+  },
+  {
+    "id": "NET-402",
+    "title": "Deploy out-of-band management network independent of BGP backbone",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2021-10-04",
+    "description": "During the BGP withdrawal incident, engineers could not reach network equipment remotely. All SSH/VPN access routed through affected backbone. Requires dedicated OOB management plane on separate physical network. Also: implement BGP change freeze requiring 2-person approval.",
+    "url": "https://jira.company.com/browse/NET-402",
+    "labels": ["oob-management", "bgp", "resilience", "network-team"]
+  }
+]

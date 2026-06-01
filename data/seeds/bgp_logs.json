@@ -1,0 +1,52 @@
+[
+  {
+    "id": "bgp-0001",
+    "timestamp": "2021-10-04T15:40:05Z",
+    "service": "dns-svc",
+    "level": "ERROR",
+    "trace_id": "t-bgp-0001",
+    "logger": "com.company.network.BGPRouteMonitor",
+    "message": "BGP route withdrawal detected: ALL prefixes withdrawn from global BGP table. 0 routes announced. DNS-svc unreachable from external networks. BGPRouteMonitor: no active peers. Backbone routers lost connectivity to all edge PoPs at 15:39:54Z.",
+    "env": "production"
+  },
+  {
+    "id": "bgp-0002",
+    "timestamp": "2021-10-04T15:40:10Z",
+    "service": "dns-svc",
+    "level": "ERROR",
+    "trace_id": "t-bgp-0002",
+    "logger": "com.company.network.DNSHealthChecker",
+    "message": "DNS resolution completely failed: company.com NXDOMAIN globally. Root cause: BGP prefix withdrawal made authoritative DNS servers unreachable from internet. 2.9 billion users affected. Internal tools also down — internal DNS routed through same backbone.",
+    "env": "production"
+  },
+  {
+    "id": "bgp-0003",
+    "timestamp": "2021-10-04T15:40:20Z",
+    "service": "dns-svc",
+    "level": "ERROR",
+    "trace_id": "t-bgp-0003",
+    "logger": "com.company.network.BGPRouteMonitor",
+    "message": "Configuration audit commands sent to backbone routers during maintenance triggered unintended route withdrawal side effect. BGP session peers: 0 active (was: 24). All traffic blackholed. Engineers unable to access network tools remotely — internal systems also unreachable.",
+    "env": "production"
+  },
+  {
+    "id": "bgp-0004",
+    "timestamp": "2021-10-04T16:00:00Z",
+    "service": "dns-svc",
+    "level": "WARN",
+    "trace_id": "t-bgp-0004",
+    "logger": "com.company.network.BGPRouteMonitor",
+    "message": "Physical datacenter access required for manual BGP restore. Remote remediation tools unavailable. Engineers dispatched to Santa Clara datacenter. ETA 20 minutes. No remote fix path — SSH/VPN also routed through affected backbone.",
+    "env": "production"
+  },
+  {
+    "id": "bgp-0005",
+    "timestamp": "2021-10-04T22:12:00Z",
+    "service": "dns-svc",
+    "level": "INFO",
+    "trace_id": "t-bgp-0005",
+    "logger": "com.company.network.BGPRouteMonitor",
+    "message": "BGP routes restored after 6h32m. Manual router reconfiguration at datacenter. BGP peers: 24/24 active. DNS resolving globally. Systems recovering — CDN cache warming, application servers reconnecting to internal services.",
+    "env": "production"
+  }
+]

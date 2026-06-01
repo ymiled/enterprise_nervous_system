@@ -1,0 +1,52 @@
+[
+  {
+    "id": "net-0001",
+    "timestamp": "2024-09-03T11:00:05Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-net-0001",
+    "logger": "io.lettuce.core.cluster.ClusterTopologyRefreshTask",
+    "message": "Redis cluster topology refresh failed: CLUSTERDOWN The cluster is down. Nodes: redis-1.prod:6379, redis-2.prod:6379 are isolated from redis-3.prod:6379, redis-4.prod:6379. Network partition detected between AZ us-east-1a and us-east-1b.",
+    "env": "production"
+  },
+  {
+    "id": "net-0002",
+    "timestamp": "2024-09-03T11:00:07Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-net-0002",
+    "logger": "io.lettuce.core.cluster.ClusterTopologyRefreshTask",
+    "message": "Redis cluster has no primary. Split-brain: both halves elected a primary for slot 0-8191. Last successful topology refresh: 2024-09-03T10:58:00Z. All WRITE operations failing. READ fallback to replica: partial coverage.",
+    "env": "production"
+  },
+  {
+    "id": "net-0003",
+    "timestamp": "2024-09-03T11:00:10Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-net-0003",
+    "logger": "com.company.order.cart.CartService",
+    "message": "Cart session writes failing 100%: redis.exceptions.ConnectionError CLUSTERDOWN. Fallback to DB writes overwhelmed Postgres — connection pool exhausted. POST /v1/orders returning 500.",
+    "env": "production"
+  },
+  {
+    "id": "net-0004",
+    "timestamp": "2024-09-03T11:00:20Z",
+    "service": "order-svc",
+    "level": "WARN",
+    "trace_id": "t-net-0004",
+    "logger": "com.company.platform.NetworkMonitor",
+    "message": "AZ isolation event: transit gateway route table update at 10:57:00Z caused route withdrawal for subnet 10.1.2.0/24 (us-east-1a Redis nodes). Packets dropped between AZs since 10:58:00Z. Network operations investigating.",
+    "env": "production"
+  },
+  {
+    "id": "net-0005",
+    "timestamp": "2024-09-03T11:05:00Z",
+    "service": "order-svc",
+    "level": "ERROR",
+    "trace_id": "t-net-0005",
+    "logger": "io.lettuce.core.cluster.ClusterTopologyRefreshTask",
+    "message": "Redis CLUSTER FAILOVER completed after 5m00s. Primary elected in us-east-1b. Transit gateway route restored at 11:04:00Z. Redis cluster recovering — slot reassignment in progress.",
+    "env": "production"
+  }
+]

@@ -1,0 +1,15 @@
+[
+  {
+    "sha": "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6",
+    "sha_short": "b7c8d9e0",
+    "message": "fix: revert transit gateway route causing ClusterTopologyRefreshTask failures\n\nClusterTopologyRefreshTask errors: CLUSTERDOWN split-brain between AZ us-east-1a/1b.\nRoute table change at 10:57Z withdrew subnet 10.1.2.0/24 (Redis cluster AZ-a nodes).\nResulted in io.lettuce.core.cluster.ClusterTopologyRefreshTask failures and Redis\nsplit-brain. Reverted to previous route table. Added AZ connectivity validation.\nReviewed-by: platform-team",
+    "author": "netops-bot",
+    "date": "2024-09-03T11:04:00Z",
+    "files_changed": [
+      "terraform/networking/transit_gateway.tf",
+      "terraform/networking/route_tables.tf"
+    ],
+    "diff": "--- terraform/networking/route_tables.tf\n@@ -12,7 +12,7 @@\n-  destination_cidr_block = \"10.1.2.0/24\"\n+  destination_cidr_block = \"10.1.0.0/16\"\n+  # Fix: ClusterTopologyRefreshTask AZ isolation caused by missing route",
+    "url": "https://github.com/company/platform/commit/b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6"
+  }
+]

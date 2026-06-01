@@ -2,6 +2,8 @@
 Smoke test: PostMortem Pydantic schema accepts valid data and rejects invalid.
 No LLM calls. No external I/O.
 """
+import copy
+
 import pytest
 from pydantic import ValidationError
 
@@ -52,12 +54,33 @@ def test_confidence_out_of_range_rejected():
 
 
 def test_short_sha_rejected():
-    bad_commit = {**_VALID}
+    bad_commit = copy.deepcopy(_VALID)  # deep copy so we don't mutate shared nested dicts
     bad_commit["evidence"]["commits"][0]["sha"] = "abc"  # too short (< 7 chars)
     with pytest.raises(ValidationError):
         PostMortem(**bad_commit)
 
 
-def test_empty_contributing_factors_rejected():
+def test_empty_contributing_factors_rejected_when_conclusive():
+    # _VALID is conclusive (inconclusive=False) → empty factors must be rejected.
     with pytest.raises(ValidationError):
         PostMortem(**{**_VALID, "contributing_factors": []})
+
+
+def test_empty_lists_allowed_when_inconclusive():
+    # An inconclusive verdict may legitimately list no factors or actions.
+    pm = PostMortem(**{
+        **_VALID,
+        "inconclusive": True,
+        "inconclusive_reason": "No related commits or tickets found",
+        "confidence_score": 0.2,
+        "contributing_factors": [],
+        "recommended_actions": [],
+    })
+    assert pm.inconclusive is True
+    assert pm.contributing_factors == []
+    assert pm.recommended_actions == []
+
+
+def test_empty_recommended_actions_rejected_when_conclusive():
+    with pytest.raises(ValidationError):
+        PostMortem(**{**_VALID, "recommended_actions": []})

@@ -1,0 +1,52 @@
+[
+  {
+    "id": "cert-0001",
+    "timestamp": "2024-06-15T02:00:01Z",
+    "service": "auth-svc",
+    "level": "ERROR",
+    "trace_id": "t-cert-0001",
+    "logger": "sun.security.ssl.SSLContextImpl",
+    "message": "SSL handshake failed: PKIX path validation failed: sun.security.validator.ValidatorException: PKIX path validation failed: java.security.cert.CertPathValidatorException: validity check failed. Certificate expired: auth.company.com (NotAfter: 2024-06-15T01:59:59Z)",
+    "env": "production"
+  },
+  {
+    "id": "cert-0002",
+    "timestamp": "2024-06-15T02:00:02Z",
+    "service": "auth-svc",
+    "level": "ERROR",
+    "trace_id": "t-cert-0002",
+    "logger": "sun.security.ssl.SSLContextImpl",
+    "message": "javax.net.ssl.SSLHandshakeException: PKIX path building failed: unable to find valid certification path to requested target. Cert chain for auth.company.com is invalid — certificate expired 60 seconds ago.",
+    "env": "production"
+  },
+  {
+    "id": "cert-0003",
+    "timestamp": "2024-06-15T02:00:05Z",
+    "service": "auth-svc",
+    "level": "ERROR",
+    "trace_id": "t-cert-0003",
+    "logger": "com.company.auth.OAuthTokenValidator",
+    "message": "Token validation rejected: upstream IdP TLS handshake failed (SSLHandshakeException). All /oauth/token requests failing since 02:00:00Z. 100% error rate.",
+    "env": "production"
+  },
+  {
+    "id": "cert-0004",
+    "timestamp": "2024-06-15T02:00:10Z",
+    "service": "auth-svc",
+    "level": "WARN",
+    "trace_id": "t-cert-0004",
+    "logger": "com.company.platform.CertMonitor",
+    "message": "Certificate expiry alert: auth.company.com wildcard TLS cert expired at 2024-06-15T02:00:00Z. Renewal workflow was not triggered. cert-manager CertificateRequest CR is in Pending state since 2024-06-14.",
+    "env": "production"
+  },
+  {
+    "id": "cert-0005",
+    "timestamp": "2024-06-15T02:00:15Z",
+    "service": "auth-svc",
+    "level": "ERROR",
+    "trace_id": "t-cert-0005",
+    "logger": "com.company.auth.GatewayFilter",
+    "message": "Downstream services blocked: order-svc, payment-svc, inventory-svc cannot authenticate. auth-svc returning 503 on all endpoints. Root: expired TLS certificate on auth.company.com.",
+    "env": "production"
+  }
+]

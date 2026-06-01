@@ -1,0 +1,16 @@
+[
+  {
+    "sha": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0",
+    "sha_short": "c1d2e3f4",
+    "message": "fix: restore BGP route announcements after backbone config withdrawal\n\nBGPRouteMonitor: all routes withdrawn during maintenance at 15:39Z.\nManual router reconfiguration restored 24/24 BGP peers after 6h32m outage.\nAdded: BGP change freeze policy, OOB management network for remote access.\nSource: based on Facebook BGP withdrawal incident 2021-10-04.\nReviewed-by: network-team",
+    "author": "netops-bot",
+    "date": "2021-10-04T22:10:00Z",
+    "files_changed": [
+      "network/bgp/backbone_config.py",
+      "network/monitoring/BGPRouteMonitor.java",
+      "runbooks/bgp-withdrawal-recovery.md"
+    ],
+    "diff": "// Fix: BGPRouteMonitor route withdrawal side effect in maintenance scripts\n// Add: OOB management plane independent of BGP backbone",
+    "url": "https://github.com/company/network-infra/commit/c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0"
+  }
+]

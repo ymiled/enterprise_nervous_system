@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for network partition / Redis split-brain incident type.",
+  "incident": "Transit gateway route change caused AZ network partition → Redis split-brain → order-svc failure",
+  "primary_fix_commit": {
+    "sha": "b7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6",
+    "sha_prefix_8": "b7c8d9e0",
+    "date": "2024-09-03",
+    "message": "fix: revert transit gateway route table update causing AZ network partition"
+  },
+  "ticket_ids": ["NET-301", "NET-302"],
+  "logger_keywords": ["io.lettuce.core.cluster.ClusterTopologyRefreshTask"],
+  "root_cause_keywords": ["network partition", "Redis", "split-brain"]
+}

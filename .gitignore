@@ -1,3 +1,4 @@
+# Claude Code session files
 .claude/
 
 # Environment
@@ -16,14 +17,11 @@ build/
 *.egg
 .eggs/
 
-# Virtual environments (uv creates .venv automatically)
+# Virtual environments
 .venv/
 venv/
 env/
 ENV/
-
-# uv
-uv.lock
 
 # IDE
 .vscode/
@@ -47,12 +45,14 @@ htmlcov/
 *.sock
 tmp/
 
+# Python version pin (local tooling only)
+.python-version
+
 # Raw datasets (large, download separately)
 data/raw/
 
-# Benchmark results (machine-generated)
-benchmarks/results/
-
-
-data/raw/
-docs/
+# Benchmark results — machine-generated runs are ignored; canonical ablation
+# files are committed (ablation_v2_n4.json, ablation_v3_n2.json).
+benchmarks/results/*.json
+!benchmarks/results/ablation_v2_n4.json
+!benchmarks/results/ablation_v3_n2.json

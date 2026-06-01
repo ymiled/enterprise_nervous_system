@@ -1,0 +1,22 @@
+[
+  {
+    "id": "SPRING-101",
+    "title": "CVE-2022-22965 (Spring4Shell) RCE via WebDataBinder classLoader binding",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2022-03-31",
+    "description": "api-svc running spring-webmvc 5.3.16 on JDK 17 / Tomcat 9 is exploitable via Spring4Shell (CVE-2022-22965 / GHSA-36p3-wjmg-h94x). WebDataBinder allows class.module.classLoader parameter binding, enabling attacker to overwrite Tomcat access log pattern and achieve RCE. 234 exploit attempts at 10:00Z. Upgrade to spring-framework 5.3.18 (fix commit 002546b3) required.",
+    "url": "https://jira.company.com/browse/SPRING-101",
+    "labels": ["CVE-2022-22965", "Spring4Shell", "RCE", "WebDataBinder", "production-incident"]
+  },
+  {
+    "id": "SPRING-102",
+    "title": "Upgrade all spring-framework to >= 5.3.18 across all JDK 9+ services",
+    "status": "Open",
+    "priority": "High",
+    "created": "2022-03-31",
+    "description": "CVE-2022-22965 affects Spring Framework < 5.3.18 / < 5.2.20 on JDK 9+. Audit all services for vulnerable versions. Also add DataBinder.setDisallowedFields() to existing Spring MVC controllers as defence-in-depth.",
+    "url": "https://jira.company.com/browse/SPRING-102",
+    "labels": ["spring", "dependency-upgrade", "CVE", "security"]
+  }
+]

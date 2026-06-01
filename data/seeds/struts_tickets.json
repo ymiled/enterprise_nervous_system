@@ -1,0 +1,22 @@
+[
+  {
+    "id": "STRUTS-101",
+    "title": "CVE-2017-5638 (S2-045) RCE via OGNL injection in Struts2 multipart Content-Type",
+    "status": "Open",
+    "priority": "Critical",
+    "created": "2017-03-07",
+    "description": "Apache Struts2 portal-svc running struts2-core 2.3.31 is vulnerable to CVE-2017-5638 (S2-045). Attacker can inject OGNL expressions via Content-Type header in multipart upload requests, leading to RCE. 847 exploit attempts detected 08:15Z. Immediate upgrade to 2.3.32 (fix commit 35230649) required. GHSA-j77q-2qqg-6989.",
+    "url": "https://jira.company.com/browse/STRUTS-101",
+    "labels": ["CVE-2017-5638", "S2-045", "OGNL", "RCE", "struts", "production-incident"]
+  },
+  {
+    "id": "STRUTS-102",
+    "title": "Audit all Struts2 versions across services and upgrade to 2.3.32+",
+    "status": "Open",
+    "priority": "High",
+    "created": "2017-03-07",
+    "description": "Following CVE-2017-5638 exploitation attempt, audit all services using Apache Struts2 and upgrade to 2.3.32 or 2.5.10.1. Add WAF rule blocking OGNL patterns in Content-Type header. Add dependency scanning to CI pipeline.",
+    "url": "https://jira.company.com/browse/STRUTS-102",
+    "labels": ["struts", "dependency-audit", "CVE", "security"]
+  }
+]

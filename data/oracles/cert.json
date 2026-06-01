@@ -1,0 +1,13 @@
+{
+  "_comment": "Hand-crafted oracle for TLS certificate expiry incident type.",
+  "incident": "Wildcard TLS cert for auth.company.com expired — all auth endpoints 503",
+  "primary_fix_commit": {
+    "sha": "f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0",
+    "sha_prefix_8": "f1a2b3c4",
+    "date": "2024-06-15",
+    "message": "fix: renew wildcard TLS certificate for auth.company.com"
+  },
+  "ticket_ids": ["CERT-101", "CERT-102"],
+  "logger_keywords": ["sun.security.ssl.SSLContextImpl"],
+  "root_cause_keywords": ["certificate", "TLS", "expired"]
+}

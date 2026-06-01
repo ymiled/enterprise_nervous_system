@@ -23,7 +23,7 @@ import json
 import sys
 import time
 from pathlib import Path
-from statistics import mean
+from statistics import mean, stdev
 
 from rich.console import Console
 from rich.table import Table
@@ -75,6 +75,25 @@ async def _run_base(scenario: Scenario, start: float) -> EvalResult:
         return evaluate(pm, scenario, elapsed, usage=usage)
     except Exception as exc:
         return failed_run(scenario, time.monotonic() - start, str(exc)[:120])
+
+
+# Retry wrapper: a 0-token result means the LLM produced nothing (transient
+# Groq failure or anyio teardown crash), not a genuine answer. Retry those so a
+# random API hiccup can't zero out a scenario and skew the comparison.
+_RETRY_WAITS = [20, 40]  # seconds; also drains Groq's per-minute token window
+
+
+def _run_with_retry(runner, scenario: Scenario, label: str, console: Console) -> EvalResult:
+    # Fresh event loop per attempt (asyncio.run) — prevents anyio cancel-scope
+    # leakage from a crashed teardown bleeding into the next try.
+    result = asyncio.run(runner(scenario, time.monotonic()))
+    for attempt, wait in enumerate(_RETRY_WAITS, start=2):
+        if result.estimated_tokens > 0:
+            break
+        console.print(f"       [retry] {label} produced 0 tokens — waiting {wait}s, attempt {attempt}...")
+        time.sleep(wait)
+        result = asyncio.run(runner(scenario, time.monotonic()))
+    return result
 
 
 # Rendering
@@ -210,9 +229,128 @@ def save_ablation(
     Console().print(f"\n[green]Ablation results saved ->[/green] {path}")
 
 
+# Repeated runs (mean ± std) — quantifies LLM non-determinism so a single
+# noisy run can't be mistaken for a real swarm-vs-baseline difference.
+
+def _ms(values: list[float]) -> tuple[float, float]:
+    """Return (mean, sample-stdev). Stdev is 0.0 when fewer than 2 samples."""
+    return mean(values), (stdev(values) if len(values) > 1 else 0.0)
+
+
+def run_repeated(scenarios: list[Scenario], repeats: int, console: Console) -> dict:
+    # per_scenario[id] = {"swarm": {metric: [vals]}, "baseline": {metric: [vals]}}
+    metrics = ("overall_score", "deterministic_score", "estimated_tokens")
+    per_scenario: dict[str, dict] = {
+        sc.id: {
+            "name": sc.name,
+            "swarm":    {m: [] for m in metrics},
+            "baseline": {m: [] for m in metrics},
+        }
+        for sc in scenarios
+    }
+
+    for rep in range(1, repeats + 1):
+        console.print(f"\n[bold cyan]── Repeat {rep}/{repeats} ──[/bold cyan]")
+        for i, scenario in enumerate(scenarios, 1):
+            console.print(f"  [{i}/{len(scenarios)}] [bold]{scenario.id}[/bold]")
+
+            console.print("    → swarm...")
+            sw = _run_with_retry(_run_swarm, scenario, "swarm", console)
+            console.print(f"       score={sw.overall_score:.2f}  det={sw.deterministic_score:.2f}  tok={sw.estimated_tokens}")
+            time.sleep(5)
+
+            console.print("    → baseline...")
+            bs = _run_with_retry(_run_base, scenario, "baseline", console)
+            console.print(f"       score={bs.overall_score:.2f}  det={bs.deterministic_score:.2f}  tok={bs.estimated_tokens}")
+            time.sleep(5)
+
+            d = per_scenario[scenario.id]
+            for m in metrics:
+                d["swarm"][m].append(getattr(sw, m))
+                d["baseline"][m].append(getattr(bs, m))
+
+    return {"repeats": repeats, "scenarios": per_scenario}
+
+
+def render_repeated(agg: dict, console: Console) -> None:
+    repeats = agg["repeats"]
+    rows = agg["scenarios"]
+
+    table = Table(
+        title=f"Ablation (N={repeats} repeats): mean ± std",
+        box=box.ROUNDED, show_lines=True, header_style="bold cyan",
+    )
+    table.add_column("ID", style="dim", width=8)
+    table.add_column("Swarm Score",   justify="right", width=15)
+    table.add_column("Base Score",    justify="right", width=15)
+    table.add_column("Swarm Tok",     justify="right", width=14)
+    table.add_column("Base Tok",      justify="right", width=14)
+
+    for sid, d in rows.items():
+        sm, ss = _ms(d["swarm"]["overall_score"])
+        bm, bs = _ms(d["baseline"]["overall_score"])
+        stk, _ = _ms(d["swarm"]["estimated_tokens"])
+        btk, _ = _ms(d["baseline"]["estimated_tokens"])
+        table.add_row(
+            sid,
+            f"[{_style(sm)}]{sm:.2f} ± {ss:.2f}[/]",
+            f"[{_style(bm)}]{bm:.2f} ± {bs:.2f}[/]",
+            f"{stk:,.0f}", f"{btk:,.0f}",
+        )
+    console.print(table)
+
+    # Aggregate across all scenarios × repeats (pooled samples).
+    def pool(side: str, metric: str) -> list[float]:
+        return [v for d in rows.values() for v in d[side][metric]]
+
+    summary = Table(title="Aggregate (pooled over scenarios × repeats)", box=box.SIMPLE, header_style="bold magenta")
+    summary.add_column("Metric", style="bold")
+    summary.add_column("4-Agent Swarm", justify="right")
+    summary.add_column("1-Agent Base",  justify="right")
+    summary.add_column("Δ (swarm−base)", justify="right")
+
+    for label, metric in [("Overall score", "overall_score"), ("Deterministic score", "deterministic_score")]:
+        sm, ss = _ms(pool("swarm", metric))
+        bm, bsd = _ms(pool("baseline", metric))
+        d = sm - bm
+        verdict = "tie (within noise)" if abs(d) <= max(ss, bsd) else ("swarm" if d > 0 else "baseline")
+        style = "dim" if verdict.startswith("tie") else ("bold green" if d > 0 else "bold red")
+        summary.add_row(label, f"{sm:.3f} ± {ss:.3f}", f"{bm:.3f} ± {bsd:.3f}", f"[{style}]{d:+.3f} → {verdict}[/]")
+
+    stk, stks = _ms(pool("swarm", "estimated_tokens"))
+    btk, btks = _ms(pool("baseline", "estimated_tokens"))
+    summary.add_row("Avg tokens (est)", f"{stk:,.0f} ± {stks:,.0f}", f"{btk:,.0f} ± {btks:,.0f}", f"{stk - btk:+,.0f}")
+
+    console.print(summary)
+
+
+def save_repeated(agg: dict, path: Path) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    rows = agg["scenarios"]
+
+    def pool(side: str, metric: str) -> list[float]:
+        return [v for d in rows.values() for v in d[side][metric]]
+
+    out = {"repeats": agg["repeats"], "per_scenario": {}, "aggregate": {}}
+    for sid, d in rows.items():
+        entry = {"name": d["name"], "swarm": {}, "baseline": {}}
+        for side in ("swarm", "baseline"):
+            for m, vals in d[side].items():
+                mn, sd = _ms(vals)
+                entry[side][m] = {"mean": round(mn, 4), "std": round(sd, 4), "samples": vals}
+        out["per_scenario"][sid] = entry
+    for side in ("swarm", "baseline"):
+        out["aggregate"][side] = {}
+        for m in ("overall_score", "deterministic_score", "estimated_tokens"):
+            mn, sd = _ms(pool(side, m))
+            out["aggregate"][side][m] = {"mean": round(mn, 4), "std": round(sd, 4)}
+    path.write_text(json.dumps(out, indent=2), encoding="utf-8")
+    Console().print(f"\n[green]Repeated ablation saved ->[/green] {path}")
+
+
 # Entry point
 
-def main(scenario_ids: list[str], output: Path | None) -> None:
+def main(scenario_ids: list[str], output: Path | None, repeats: int = 1) -> None:
     console = Console()
 
     if scenario_ids:
@@ -224,6 +362,15 @@ def main(scenario_ids: list[str], output: Path | None) -> None:
         console.print("[red]No scenarios to run.[/red]")
         sys.exit(1)
 
+    if repeats > 1:
+        console.print(f"\n[bold cyan]Ablation: {len(scenarios)} scenario(s) × 2 approaches × {repeats} repeats...[/bold cyan]")
+        agg = run_repeated(scenarios, repeats, console)
+        out_path = output or (RESULTS_DIR / "ablation_repeated.json")
+        save_repeated(agg, out_path)
+        console.print()
+        render_repeated(agg, console)
+        return
+
     console.print(f"\n[bold cyan]Ablation: running {len(scenarios)} scenario(s) × 2 approaches...[/bold cyan]\n")
 
     pairs: list[tuple[EvalResult, EvalResult]] = []
@@ -232,16 +379,14 @@ def main(scenario_ids: list[str], output: Path | None) -> None:
 
         # Swarm run
         console.print("    → swarm...")
-        start = time.monotonic()
-        swarm_result = asyncio.run(_run_swarm(scenario, start))
+        swarm_result = _run_with_retry(_run_swarm, scenario, "swarm", console)
         console.print(f"       score={swarm_result.overall_score:.2f}  det={swarm_result.deterministic_score:.2f}  tok={swarm_result.estimated_tokens}  t={swarm_result.elapsed_seconds}s")
 
         time.sleep(5)  # cooldown between LLM calls
 
         # Baseline run
         console.print("    → baseline...")
-        start = time.monotonic()
-        base_result = asyncio.run(_run_base(scenario, start))
+        base_result = _run_with_retry(_run_base, scenario, "baseline", console)
         console.print(f"       score={base_result.overall_score:.2f}  det={base_result.deterministic_score:.2f}  tok={base_result.estimated_tokens}  t={base_result.elapsed_seconds}s\n")
 
         pairs.append((swarm_result, base_result))
@@ -257,7 +402,9 @@ def main(scenario_ids: list[str], output: Path | None) -> None:
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Ablation: swarm vs baseline")
-    parser.add_argument("--ids",    nargs="*", default=[])
-    parser.add_argument("--output", type=Path, default=None)
+    parser.add_argument("--ids",     nargs="*", default=[])
+    parser.add_argument("--output",  type=Path, default=None)
+    parser.add_argument("--repeats", type=int,  default=1,
+                        help="Run each scenario N times and report mean ± std (quantifies LLM noise).")
     args = parser.parse_args()
-    main(scenario_ids=args.ids, output=args.output)
+    main(scenario_ids=args.ids, output=args.output, repeats=args.repeats)

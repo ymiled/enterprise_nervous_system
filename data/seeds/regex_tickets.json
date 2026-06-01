@@ -1,0 +1,22 @@
+[
+  {
+    "id": "WAF-201",
+    "title": "WAF rule 100074 caused LuaRegexEngine catastrophic backtracking — 27min global outage",
+    "status": "Resolved",
+    "priority": "Critical",
+    "created": "2019-07-02",
+    "description": "New WAF rule (XSS detection pattern) deployed via automated push at 13:41Z. Pattern contained unbounded alternation causing O(n^2) LuaRegexEngine CPU on standard HTTP POST bodies. 100% CPU on all 72 vCPU workers across 194 PoPs. Global traffic outage for 27 minutes. Rollback at 13:49Z. Based on Cloudflare WAF Lua regex incident 2019-07-02 (blog.cloudflare.com/details-of-the-cloudflare-outage-on-july-2-2019).",
+    "url": "https://jira.company.com/browse/WAF-201",
+    "labels": ["regex", "waf", "cpu", "global-outage", "production-incident"]
+  },
+  {
+    "id": "WAF-202",
+    "title": "Add catastrophic backtracking detection to WAF rule CI pipeline",
+    "status": "Open",
+    "priority": "High",
+    "created": "2019-07-02",
+    "description": "Integrate rexploiter or equivalent ReDoS checker into WAF rule CI. Gate all new rule merges on passing catastrophic backtracking test with representative HTTP payloads. Disable automated global rule push until validation is in place.",
+    "url": "https://jira.company.com/browse/WAF-202",
+    "labels": ["ci", "waf", "security", "regex"]
+  }
+]

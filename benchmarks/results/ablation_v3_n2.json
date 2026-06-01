@@ -1,0 +1,475 @@
+{
+  "repeats": 2,
+  "per_scenario": {
+    "ls-01": {
+      "name": "Log4Shell \u00b7 payment-svc \u00b7 P0 \u00b7 JNDI RCE exploit",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.881,
+          "std": 0.0,
+          "samples": [
+            0.881,
+            0.881
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 14306,
+          "std": 4450.5301,
+          "samples": [
+            17453,
+            11159
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.768,
+          "std": 0.0255,
+          "samples": [
+            0.75,
+            0.786
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.833,
+          "std": 0.0,
+          "samples": [
+            0.833,
+            0.833
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 11619.5,
+          "std": 101.1163,
+          "samples": [
+            11548,
+            11691
+          ]
+        }
+      }
+    },
+    "t4s-01": {
+      "name": "Text4Shell \u00b7 template-svc \u00b7 P0 \u00b7 script lookup RCE via display name",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.9165,
+          "std": 0.0502,
+          "samples": [
+            0.952,
+            0.881
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 6353.5,
+          "std": 1010.4556,
+          "samples": [
+            5639,
+            7068
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.952,
+          "std": 0.0,
+          "samples": [
+            0.952,
+            0.952
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 6880.5,
+          "std": 54.4472,
+          "samples": [
+            6842,
+            6919
+          ]
+        }
+      }
+    },
+    "neg-01": {
+      "name": "Negative \u00b7 commons-lang \u00b7 no related commits or tickets",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.4765,
+          "std": 0.0672,
+          "samples": [
+            0.429,
+            0.524
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.7225,
+          "std": 0.0785,
+          "samples": [
+            0.667,
+            0.778
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 3112,
+          "std": 11.3137,
+          "samples": [
+            3104,
+            3120
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.567,
+          "std": 0.0,
+          "samples": [
+            0.567,
+            0.567
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.828,
+          "std": 0.0,
+          "samples": [
+            0.828,
+            0.828
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 2423,
+          "std": 1.4142,
+          "samples": [
+            2424,
+            2422
+          ]
+        }
+      }
+    },
+    "oom-01": {
+      "name": "OOM \u00b7 payment-svc \u00b7 P0 \u00b7 JVM heap exhausted / OOMKilled",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.5475,
+          "std": 0.0332,
+          "samples": [
+            0.571,
+            0.524
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.8055,
+          "std": 0.0389,
+          "samples": [
+            0.833,
+            0.778
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 7368,
+          "std": 29.6985,
+          "samples": [
+            7347,
+            7389
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.667,
+          "std": 0.0,
+          "samples": [
+            0.667,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 2518.5,
+          "std": 89.8026,
+          "samples": [
+            2582,
+            2455
+          ]
+        }
+      }
+    },
+    "dep-01": {
+      "name": "BadDeploy \u00b7 payment-svc \u00b7 P0 \u00b7 DB_HOST points to staging",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.9405,
+          "std": 0.0841,
+          "samples": [
+            1.0,
+            0.881
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.9725,
+          "std": 0.0389,
+          "samples": [
+            1.0,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 4806.5,
+          "std": 399.5153,
+          "samples": [
+            5089,
+            4524
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.667,
+          "std": 0.0,
+          "samples": [
+            0.667,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 3055,
+          "std": 2.8284,
+          "samples": [
+            3057,
+            3053
+          ]
+        }
+      }
+    },
+    "cert-01": {
+      "name": "Cert expiry \u00b7 auth-svc \u00b7 P0 \u00b7 wildcard TLS cert expired",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.774,
+          "std": 0.1513,
+          "samples": [
+            0.881,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 4923,
+          "std": 690.1362,
+          "samples": [
+            4435,
+            5411
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.6905,
+          "std": 0.0332,
+          "samples": [
+            0.714,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.9725,
+          "std": 0.0389,
+          "samples": [
+            1.0,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 2998,
+          "std": 339.4113,
+          "samples": [
+            3238,
+            2758
+          ]
+        }
+      }
+    },
+    "cfg-01": {
+      "name": "Schema migration \u00b7 jobs-svc \u00b7 P0 \u00b7 type mismatch distributor stuck (CircleCI 2021)",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.667,
+          "std": 0.0,
+          "samples": [
+            0.667,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 5902.5,
+          "std": 185.9691,
+          "samples": [
+            5771,
+            6034
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.774,
+          "std": 0.1513,
+          "samples": [
+            0.881,
+            0.667
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 3385.5,
+          "std": 34.6482,
+          "samples": [
+            3361,
+            3410
+          ]
+        }
+      }
+    },
+    "struts-01": {
+      "name": "Apache Struts \u00b7 portal-svc \u00b7 P0 \u00b7 CVE-2017-5638 OGNL injection RCE (Equifax 2017)",
+      "swarm": {
+        "overall_score": {
+          "mean": 0.952,
+          "std": 0.0,
+          "samples": [
+            0.952,
+            0.952
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 5575.5,
+          "std": 252.4371,
+          "samples": [
+            5397,
+            5754
+          ]
+        }
+      },
+      "baseline": {
+        "overall_score": {
+          "mean": 0.881,
+          "std": 0.0,
+          "samples": [
+            0.881,
+            0.881
+          ]
+        },
+        "deterministic_score": {
+          "mean": 0.945,
+          "std": 0.0,
+          "samples": [
+            0.945,
+            0.945
+          ]
+        },
+        "estimated_tokens": {
+          "mean": 3136.5,
+          "std": 82.7315,
+          "samples": [
+            3078,
+            3195
+          ]
+        }
+      }
+    }
+  },
+  "aggregate": {
+    "swarm": {
+      "overall_score": {
+        "mean": 0.7694,
+        "std": 0.1867
+      },
+      "deterministic_score": {
+        "mean": 0.9032,
+        "std": 0.0897
+      },
+      "estimated_tokens": {
+        "mean": 6543.375,
+        "std": 3474.1008
+      }
+    },
+    "baseline": {
+      "overall_score": {
+        "mean": 0.7458,
+        "std": 0.1275
+      },
+      "deterministic_score": {
+        "mean": 0.9198,
+        "std": 0.055
+      },
+      "estimated_tokens": {
+        "mean": 4502.0625,
+        "std": 3100.7918
+      }
+    }
+  }
+}

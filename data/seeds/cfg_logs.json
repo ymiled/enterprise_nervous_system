@@ -1,0 +1,52 @@
+[
+  {
+    "id": "cfg-0001",
+    "timestamp": "2021-11-08T14:20:05Z",
+    "service": "jobs-svc",
+    "level": "ERROR",
+    "trace_id": "t-cfg-0001",
+    "logger": "com.company.jobs.distributor.JobDistributor",
+    "message": "ERROR: column 'job_type' is of type integer but expression is of type text. HINT: You will need to rewrite or cast the expression. PostgreSQL error: 42804. Distributor failed to deserialize job row — schema migration changed column type from text to integer; old code path reads both old and new rows.",
+    "env": "production"
+  },
+  {
+    "id": "cfg-0002",
+    "timestamp": "2021-11-08T14:20:07Z",
+    "service": "jobs-svc",
+    "level": "ERROR",
+    "trace_id": "t-cfg-0002",
+    "logger": "com.company.jobs.distributor.JobDistributor",
+    "message": "All build jobs stuck in NOT_RUNNING state. Distributor scans queue every 5s — strict schema validation fails on rows written between old and new deploy. Mixed column types in job_type column preventing distribution. 0 jobs dispatched in last 60s.",
+    "env": "production"
+  },
+  {
+    "id": "cfg-0003",
+    "timestamp": "2021-11-08T14:20:10Z",
+    "service": "jobs-svc",
+    "level": "ERROR",
+    "trace_id": "t-cfg-0003",
+    "logger": "com.company.jobs.queue.JobQueue",
+    "message": "Queue depth growing: 4,200 jobs in NOT_RUNNING state (normal: < 50). No jobs dispatched since 14:19:30Z — correlates exactly with deploy of jobs-svc v2.4.1 at 14:19:00Z. Deploy introduced schema migration V88__change_job_type_to_integer.sql.",
+    "env": "production"
+  },
+  {
+    "id": "cfg-0004",
+    "timestamp": "2021-11-08T14:21:00Z",
+    "service": "jobs-svc",
+    "level": "WARN",
+    "trace_id": "t-cfg-0004",
+    "logger": "com.company.jobs.distributor.JobDistributor",
+    "message": "Rollback failed: new code deployed, but mixed-type rows remain in database. Rolling back jobs-svc binary without database rollback leaves rows written in transition window unreadable. Manual remediation required: deploy bridge code that ignores offending field and reads both integer and text job_type column values.",
+    "env": "production"
+  },
+  {
+    "id": "cfg-0005",
+    "timestamp": "2021-11-08T14:35:00Z",
+    "service": "jobs-svc",
+    "level": "INFO",
+    "trace_id": "t-cfg-0005",
+    "logger": "com.company.jobs.distributor.JobDistributor",
+    "message": "Bridge deploy complete: jobs-svc v2.4.2 deployed with job_type column read compatibility (accepts both integer and text). Queue drain started. Jobs distributing normally. 4,200 stuck jobs being processed.",
+    "env": "production"
+  }
+]

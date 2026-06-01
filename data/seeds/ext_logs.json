@@ -1,0 +1,52 @@
+[
+  {
+    "id": "ext-0001",
+    "timestamp": "2024-11-08T18:00:05Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-ext-0001",
+    "logger": "com.stripe.exception.ApiConnectionException",
+    "message": "Stripe API connection timeout after 30000ms: POST https://api.stripe.com/v1/charges. Read timed out. Stripe status page (status.stripe.com) reports API degradation since 17:58:00 UTC. Error rate on /v1/payments: 87%.",
+    "env": "production"
+  },
+  {
+    "id": "ext-0002",
+    "timestamp": "2024-11-08T18:00:10Z",
+    "service": "payment-svc",
+    "level": "ERROR",
+    "trace_id": "t-ext-0002",
+    "logger": "com.stripe.exception.ApiConnectionException",
+    "message": "Stripe charges API P99 latency 32s (SLA: 2s). Circuit breaker OPEN after 50% failure rate over 60s window. Falling back to queued payment mode. Queue depth: 847 pending transactions.",
+    "env": "production"
+  },
+  {
+    "id": "ext-0003",
+    "timestamp": "2024-11-08T18:01:00Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-ext-0003",
+    "logger": "com.company.payment.circuit.StripeCircuitBreaker",
+    "message": "Circuit breaker transition: CLOSED → OPEN. Threshold: 50% errors in 60s. Stripe API degradation. Queue-based fallback active. Estimated queue drain: 4 minutes at normal throughput.",
+    "env": "production"
+  },
+  {
+    "id": "ext-0004",
+    "timestamp": "2024-11-08T18:05:00Z",
+    "service": "payment-svc",
+    "level": "WARN",
+    "trace_id": "t-ext-0004",
+    "logger": "com.company.payment.circuit.StripeCircuitBreaker",
+    "message": "Stripe API health check: HTTP 200 latency 450ms. Circuit breaker HALF-OPEN. Testing recovery. Stripe status page: 'Monitoring - API latency returning to normal 18:04 UTC'.",
+    "env": "production"
+  },
+  {
+    "id": "ext-0005",
+    "timestamp": "2024-11-08T18:06:00Z",
+    "service": "payment-svc",
+    "level": "INFO",
+    "trace_id": "t-ext-0005",
+    "logger": "com.company.payment.circuit.StripeCircuitBreaker",
+    "message": "Circuit breaker CLOSED. Stripe API recovered. Processing queued transactions: 847 pending. Normal operation resumed. Total impact: 6 minutes, 847 delayed transactions, 0 lost.",
+    "env": "production"
+  }
+]

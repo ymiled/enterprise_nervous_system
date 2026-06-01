@@ -1,0 +1,14 @@
+{
+  "_comment": "Based on Facebook/Meta BGP withdrawal incident 2021-10-04. https://engineering.fb.com/2021/10/05/networking-traffic/outage-details/",
+  "_source": "https://engineering.fb.com/2021/10/05/networking-traffic/outage-details/",
+  "incident": "Backbone router maintenance config command accidentally withdrew all BGP prefix announcements, making DNS and all services globally unreachable for 6h32m",
+  "primary_fix_commit": {
+    "sha": "c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d0",
+    "sha_prefix_8": "c1d2e3f4",
+    "date": "2021-10-04",
+    "message": "fix: restore BGP route announcements after backbone config withdrawal"
+  },
+  "ticket_ids": ["NET-401", "NET-402"],
+  "logger_keywords": ["com.company.network.BGPRouteMonitor"],
+  "root_cause_keywords": ["BGP", "route withdrawal", "backbone"]
+}

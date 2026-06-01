@@ -1,0 +1,22 @@
+[
+  {
+    "id": "JOBS-501",
+    "title": "All build jobs stuck NOT_RUNNING after v2.4.1 deploy — schema migration type mismatch",
+    "status": "Resolved",
+    "priority": "Critical",
+    "created": "2021-11-08",
+    "description": "Deploy of jobs-svc v2.4.1 at 14:19Z introduced V88 schema migration that changed job_type column from text to integer. Strict schema validation in JobDistributor failed on mixed-type rows written during rollout. 4,200 jobs stuck NOT_RUNNING for 16 minutes. Fixed by deploying bridge code v2.4.2 that accepts both column types. Source: based on CircleCI incident 2021-11-08.",
+    "url": "https://jira.company.com/browse/JOBS-501",
+    "labels": ["schema-migration", "type-mismatch", "deploy", "jobs-svc", "production-incident"]
+  },
+  {
+    "id": "JOBS-502",
+    "title": "Add schema migration smoke test and rollback validation to deploy pipeline",
+    "status": "Open",
+    "priority": "High",
+    "created": "2021-11-08",
+    "description": "Add pre-deploy validation that runs migration and reads/writes with new schema before shifting traffic. Require explicit forward/backward compatibility proof for type changes. Add queue-depth alert that fires within 60s of jobs stuck NOT_RUNNING.",
+    "url": "https://jira.company.com/browse/JOBS-502",
+    "labels": ["deploy-safety", "schema", "jobs-team"]
+  }
+]

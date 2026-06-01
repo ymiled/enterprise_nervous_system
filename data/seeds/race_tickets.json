@@ -1,0 +1,22 @@
+[
+  {
+    "id": "INV-401",
+    "title": "Flash sale deadlock: reserve_stock() lock-order inversion causing 67% 500s",
+    "status": "Resolved",
+    "priority": "Critical",
+    "created": "2024-08-20",
+    "description": "Flash sale traffic (1200 concurrent /reserve) triggered MySQL deadlocks at 240/min due to lock-order inversion in reserve_stock(): inventory_items and inventory_reservations acquired in non-deterministic order. 67% error rate on /v1/inventory/reserve. Hotfix d5e6f7a8 enforced deterministic lock order. Resolved within 15 minutes.",
+    "url": "https://jira.company.com/browse/INV-401",
+    "labels": ["deadlock", "race-condition", "mysql", "inventory-svc", "flash-sale", "production-incident"]
+  },
+  {
+    "id": "INV-402",
+    "title": "Add distributed lock and load test for flash sale inventory reservation path",
+    "status": "Open",
+    "priority": "High",
+    "created": "2024-08-20",
+    "description": "Add Redis-based distributed lock for reserve_stock() to prevent lock-order deadlocks under high concurrency. Add load test (1000+ concurrent requests) to CI pipeline for inventory reservation. Review all other multi-table transactions for lock-order issues.",
+    "url": "https://jira.company.com/browse/INV-402",
+    "labels": ["distributed-lock", "redis", "load-test", "inventory-team"]
+  }
+]

@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class LogEvidence(BaseModel):
@@ -56,19 +56,32 @@ class PostMortem(BaseModel):
 
     # Core RCA output
     root_cause: str = Field(..., description="One-sentence root cause, must cite evidence.")
-    contributing_factors: list[str] = Field(..., min_length=1)
+    # Required (>=1) only for a conclusive postmortem; an inconclusive verdict
+    # legitimately has nothing to list. Enforced in _require_when_conclusive.
+    contributing_factors: list[str] = Field(default_factory=list)
     timeline: list[str] = Field(default_factory=list)
 
     # Linked evidence (cited by agents)
     evidence: Evidence
 
-    # Governor-enforced actions
-    recommended_actions: list[Action] = Field(..., min_length=1)
+    # Governor-enforced actions (>=1 only when conclusive — see validator)
+    recommended_actions: list[Action] = Field(default_factory=list)
 
     # Confidence
     confidence_score: float = Field(..., ge=0.0, le=1.0)
     inconclusive: bool = False
     inconclusive_reason: str | None = None
+
+    @model_validator(mode="after")
+    def _require_when_conclusive(self) -> "PostMortem":
+        # A conclusive postmortem must name >=1 contributing factor and >=1
+        # recommended action. An inconclusive one may leave both empty.
+        if not self.inconclusive:
+            if not self.contributing_factors:
+                raise ValueError("contributing_factors must have >=1 item when not inconclusive")
+            if not self.recommended_actions:
+                raise ValueError("recommended_actions must have >=1 item when not inconclusive")
+        return self
 
     class Config:
         json_schema_extra = {

@@ -12,52 +12,46 @@ An autonomous root-cause analysis system that queries GitHub, Jira, and applicat
 │                    Incident Trigger                         │
 │    PagerDuty webhook / API / Slack slash command            │
 └──────────────────────────┬──────────────────────────────────┘
-                           │   Adaptive routing
-                      ┌────▼────┐
-                      │ Router  │ ← OOM → single-agent
-                      │        │   CVE/security → swarm
-                      └────┬────┘
-              ┌────────────▼────────────┐
-              │     AG2 Orchestrator    │  ← swarm/orchestrator.py
-              │   (MCPClientSession     │
-              │      Manager)           │
-              └──┬──────────┬───────────┘
-                 │          │           │
-    ┌────────────▼─┐  ┌─────▼──────┐  ┌▼────────────┐
-    │  DevOps Agent│  │  SWE Agent │  │   PM Agent  │
-    │  (logs MCP)  │  │(github MCP)│  │ (jira MCP)  │
-    └──────┬───────┘  └─────┬──────┘  └──────┬──────┘
-           │                │                │
-    DEVOPS_DONE        SWE_DONE          PM_DONE
-           └────────────────┼────────────────┘
-                            │  (smart speaker selection blocks
-                            │   Critic until all 3 sentinels present)
-              ┌─────────────▼───────────┐
-              │    AG2 Critic Agent     │  ← synthesises PostMortem JSON
-              │  (PII check, citation   │
-              │   enforcement, rules)   │
-              └─────────────┬───────────┘
-                            │
-              ┌─────────────▼───────────┐
-              │   PostMortem (JSON)     │  ← schemas/postmortem.py
-              │  validated by Pydantic  │
-              └─────────────┬───────────┘
-                            │
-              ┌─────────────▼───────────┐
-              │   Slack / Confluence    │  ← POST /pagerduty/webhook
-              │   (on-call review)      │     → _post_to_slack()
-              └─────────────────────────┘
+                           │
+                      ┌────▼────┐   LogisticRegression classifier
+                      │ Router  │   trained on ablation outcomes
+                      └─┬─────┬─┘   (swarm/routing.py)
+                        │     │
+          CVE/structured│     │OOM/resource/ambiguous
+                        │     │
+          ┌─────────────▼──┐ ┌▼────────────────────────┐
+          │  AG2 Swarm     │ │  Single-Agent Baseline  │
+          │  Orchestrator  │ │  (benchmarks/baseline.py│
+          │  (4 agents)    │ │   one LLM call, all 3   │
+          └──┬──────────┬──┘ │   MCP tools available)  │
+             │          │    └──────────┬──────────────┘
+    ┌────────▼─┐  ┌─────▼──────┐        │
+    │  DevOps  │  │  SWE Agent │  ┌─────▼─────────────┐
+    │  Agent   │  │(github MCP)│  │  PM Agent         │
+    │(logs MCP)│  └─────┬──────┘  │  (jira MCP)       │
+    └────┬─────┘        │         └────┬──────────────┘
+  DEVOPS_DONE      SWE_DONE        PM_DONE
+         └──────────────┼─────────────┘
+                        │
+                        │  (smart speaker selection blocks
+                        │   Critic until all 3 sentinels present)
+                        │
+          ┌─────────────▼───────────┐
+          │    AG2 Critic Agent     │  ← synthesises PostMortem JSON
+          │  (PII check, citation   │
+          │   enforcement, rules)   │
+          └─────────────┬───────────┘
+                        │                        │ (baseline path
+          ┌─────────────▼───────────┐            │  skips to here)
+          │   PostMortem (JSON)     │◄───────────┘
+          │  validated by Pydantic  │  ← schemas/postmortem.py
+          └─────────────┬───────────┘
+                        │
+          ┌─────────────▼───────────┐
+          │   Slack / Confluence    │  ← POST /pagerduty/webhook
+          │   (on-call review)      │     → _post_to_slack()
+          └─────────────────────────┘
 ```
-
-**Stack:**
-| Layer | Technology | Role |
-|---|---|---|
-| Connectors | [FastMCP](https://github.com/jlowin/fastmcp) | Secure, scoped data access |
-| Swarm | [AG2](https://ag2.ai) | Multi-agent debate, orchestration & output enforcement |
-| Schema | Pydantic v2 | Post-mortem contract enforcement |
-| Routing | scikit-learn LogisticRegression | Learned swarm-vs-baseline routing from ablation data |
-| Judge | OpenAI gpt-4o-mini | Independent LLM-as-judge (not self-evaluation) |
-
 ---
 
 ## Quickstart
@@ -134,7 +128,7 @@ curl -X POST http://localhost:8000/analyze \
 
 Two runs document how judge quality changes findings. Both use OpenAI gpt-4o-mini as the independent judge (not the swarm model, avoiding circular self-evaluation). Fallback: Claude claude-sonnet-4-6 → Groq.
 
-#### v3 — current results (N=2, fixed judge with 5-point rubric + temperature=0.0)
+#### Results
 
 | Scenario | Swarm Score | Baseline Score | Δ | Swarm Tokens | Baseline Tokens |
 |---|---|---|---|---|---|
@@ -148,36 +142,18 @@ Two runs document how judge quality changes findings. Both use OpenAI gpt-4o-min
 | struts-01 (Struts CVE) | **0.95 ± 0.00** | 0.88 ± 0.00 | +0.07 | 5,576 | 3,137 |
 | **Aggregate** | **0.769 ± 0.187** | 0.746 ± 0.128 | **+0.023** | 6,543 | 4,502 |
 
-**v3 findings (honest):**
+**Findings:**
 
 - **Quality: swarm leads aggregate** — Δ = +0.023, swarm wins 4/8 clearly, ties on t4s-01. Swarm is better when evidence sources align (CVE incidents + structured deploys); baseline better on resource exhaustion and ambiguous incidents.
 - **Token cost: swarm uses +45% more tokens** — 6,543 vs 4,502 avg. The previous "44% savings" claim was a measurement error: `total_chars // 4` severely undercounts swarm output (which includes code diffs and log entries — content with high token density per character). Fixed with `tiktoken` cl100k_base.
 - **High variance on some scenarios**: cert-01 swarm std=0.15 signals the Critic occasionally produces low-confidence output when log and commit evidence partially conflict.
 
-#### v2 — historical (N=4, old judge with uniform 0.5 bias)
-
-The v2 judge (missing `temperature=0.0`, vague rubric) produced `rca_accuracy` ≈ 0.5 for most scenarios — a systematic bias toward the midpoint. Historical numbers retained for comparison:
-
-| Scenario | Swarm | Baseline | Δ |
-|---|---|---|---|
-| ls-01 | 0.857 | 0.782 | +0.075 |
-| t4s-01 | 0.530 | **0.976** | -0.446 |
-| oom-01 | 0.631 | **0.917** | -0.286 |
-| dep-01 | 0.786 | **0.952** | -0.167 |
-| **Aggregate** | 0.715 | **0.881** | -0.166 |
-
-v2 overstated baseline advantage because the judge could not score above 0.5 on well-reasoned CVE postmortems. v3 is the correct comparison.
 
 ```bash
-# Reproduce v3:
+# Reproduce results:
 uv run python benchmarks/ablation_runner.py \
   --ids ls-01 t4s-01 neg-01 oom-01 dep-01 cert-01 cfg-01 struts-01 \
   --repeats 2 --output benchmarks/results/ablation_v3_n2.json
-
-# Reproduce v2 (historical):
-uv run python benchmarks/ablation_runner.py \
-  --ids ls-01 t4s-01 neg-01 oom-01 dep-01 cert-01 cfg-01 struts-01 \
-  --repeats 4 --output benchmarks/results/ablation_v2_n4.json
 ```
 
 ### Scenario families (50 total)
@@ -250,11 +226,5 @@ uv run python -m pytest tests/
 **Why smart speaker selection?**
 `round_robin` lets Critic fire before specialists complete — it echoes sentinel tokens instead of synthesising. `_smart_select_speaker()` blocks Critic until `DEVOPS_DONE`, `SWE_DONE`, `PM_DONE` all appear.
 
-**Why OpenAI as judge?**
-Groq Llama-3.3-70B judging its own output is circular — scores are optimistic and not trustworthy. `benchmarks/judge.py` routes to `gpt-4o-mini` (primary) when `OPENAI_API_KEY` is set, falling back to `claude-sonnet-4-6` then Groq. Judge uses `temperature=0.0` and a 5-point rubric (0.0/0.25/0.5/0.75/1.0) to prevent score collapse to the midpoint — the v2 judge lacked both, causing `rca_accuracy ≈ 0.5` for nearly all scenarios.
-
 **Why adaptive routing?**
 v3 ablation: swarm Δ = +0.11 on Log4Shell, -0.12 on OOM, +0.27 on BadDeploy. `swarm/routing.py` fits a `LogisticRegression` on the N=8 ablation outcomes (LOO-CV = 88% on v2 labels). Key finding: routing on service+severity alone is underdetermined for 4/8 scenario types — dep/cert/cfg/struts share the same feature signature but different outcomes. Routing accuracy improves when incident context text (first alert body line) is passed via the `context` parameter.
-
-**Why tiktoken instead of `total_chars // 4`?**
-The char/4 heuristic underestimated swarm tokens by ~2.6× because swarm output contains code diffs and structured log entries (high token density per character). The baseline estimate was accurate because it produces plain-text postmortems. `tiktoken cl100k_base` is now used; fallback to char/4 if tiktoken is absent.

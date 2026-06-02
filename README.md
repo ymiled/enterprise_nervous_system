@@ -64,8 +64,11 @@ uv sync
 **2. Configure environment**
 ```bash
 cp .env.example .env
-# Required: GROQ_API_KEY (swarm LLM), OPENAI_API_KEY (independent judge)
-# Optional: ANTHROPIC_API_KEY (fallback judge), SLACK_WEBHOOK_URL, PAGERDUTY_WEBHOOK_SECRET
+# Swarm LLM: agents try gpt-4o → gpt-4o-mini → Groq Llama-3.3-70b (set OPENAI_API_KEY
+#   and/or GROQ_API_KEY). gpt-4o strongly recommended — a weaker model can hallucinate
+#   evidence on live data (see TECHNICAL_NOTES, "All-Live Run").
+# Judge (independent eval): OPENAI_API_KEY → ANTHROPIC_API_KEY → GROQ_API_KEY
+# Optional: SLACK_WEBHOOK_URL, PAGERDUTY_WEBHOOK_SECRET, REDIS_URL (durable jobs + worker)
 ```
 
 **3. Run the swarm against the Log4Shell scenario**
@@ -74,6 +77,16 @@ uv run python swarm/orchestrator.py
 uv run python swarm/orchestrator.py --service payment-svc --since 2021-12-10T06:15:00Z --severity P0
 uv run python swarm/orchestrator.py --output postmortem.json
 ```
+
+**Mock vs live backends.** Each MCP server has a `mock` mode (seed JSON, deterministic)
+and a `live` mode, set per-server via `LOGS_MODE` / `GITHUB_MODE` / `JIRA_MODE`:
+- **GitHub live**: hybrid GraphQL v4 + REST (history & PR linkage via GraphQL; full-text
+  commit search via REST `/search/commits`; raw patches via REST). Requires `GITHUB_TOKEN`.
+- **Jira live**: Apache public Jira REST v2 (no auth needed).
+- **Logs live**: Elasticsearch (`docker compose up -d elasticsearch`, then
+  `uv run python data/loaders/es_ingestor.py` to populate the index).
+
+Run the full durable stack (api + rq worker + redis + elasticsearch) with `docker compose up`.
 
 ---
 
@@ -97,17 +110,34 @@ Wire PagerDuty → Slack:
 *Confidence:* 95%  |  Tokens: 5,371
 ```
 
-Tested end-to-end with `pytest tests/test_pagerduty_webhook.py` (6 tests, 0 external calls).
+### POST /analyze — async job queue + adaptive routing
 
-### POST /analyze — adaptive routing
+`POST /analyze` enqueues the analysis and returns immediately (HTTP 202); you poll
+`GET /analyze/{job_id}` for the result. This keeps Slack/PagerDuty webhooks fast and
+lets long RCAs run without holding a request open.
 
 ```bash
+# 1. submit — returns {"job_id": "...", "status": "queued", "transport": "rq"|"background"}
 curl -X POST http://localhost:8000/analyze \
   -H "Content-Type: application/json" \
   -d '{"service": "payment-svc", "incident_time": "2021-12-10T06:15:00Z", "severity": "P0", "mode": "auto"}'
+
+# 2. poll — {"status": "running"|"done"|"failed", "result": {...}}
+curl http://localhost:8000/analyze/<job_id>
 ```
 
-`mode` options: `auto` (default — `LogisticRegression` classifier in `swarm/routing.py` routes based on incident context; JNDI/CVE → swarm, OOM/resource → single), `swarm`, `single`.
+**Execution transport** (chosen automatically by `REDIS_URL`):
+- **rq worker** when `REDIS_URL` is set — `POST /analyze` only enqueues; a separate
+  worker process (`uv run python -m api.worker`) runs the swarm, so an API crash cannot
+  orphan an in-flight job. Start the full stack with `docker compose up` (api + worker +
+  redis + elasticsearch).
+- **BackgroundTasks** otherwise — runs in the API process; fine for a single dev replica.
+
+Job state lives in a Redis-backed store (durable, TTL-evicted) when `REDIS_URL` is set,
+else an in-memory store with TTL eviction.
+
+`mode` options: `auto` (default — `LogisticRegression` classifier in `swarm/routing.py`
+routes based on incident context; JNDI/CVE → swarm, OOM/resource → single), `swarm`, `single`.
 
 ### POST /slack/analyze (Slack slash command)
 
@@ -117,114 +147,22 @@ curl -X POST http://localhost:8000/analyze \
 
 ---
 
-## Benchmark Suite
+## Benchmarks
 
-**50 scenarios across 15 incident families.** Real-incident sourcing:
-- **GHSA Advisory Database** (GitHub Advisory API, no token needed): Struts CVE-2017-5638 commit SHA `35230649`, Spring4Shell CVE-2022-22965 commit SHA `002546b3` — fetched via `data/loaders/ghsa_fetcher.py`
-- **Cited public postmortems**: CircleCI schema migration (2021), Facebook/Meta BGP withdrawal (2021), Cloudflare WAF regex (2019), Log4Shell (CVE-2021-44228), Text4Shell (CVE-2022-42889)
-- **Synthetic variants**: 40 scenarios extending real incident types to different services/severities
+50 scenarios across 15 incident families (real CVEs + cited public postmortems + synthetic variants), scored by an independent LLM judge (gpt-4o-mini, separate from the swarm model).
 
-### Ablation: 4-agent swarm vs 1-agent baseline
+**Headline — 4-agent swarm vs 1-agent baseline:**
 
-Two runs document how judge quality changes findings. Both use OpenAI gpt-4o-mini as the independent judge (not the swarm model, avoiding circular self-evaluation). Fallback: Claude claude-sonnet-4-6 → Groq.
-
-#### Results
-
-| Scenario | Swarm Score | Baseline Score | Δ | Swarm Tokens | Baseline Tokens |
-|---|---|---|---|---|---|
-| ls-01 (Log4Shell CVE) | **0.88 ± 0.00** | 0.77 ± 0.03 | +0.11 | 14,306 | 11,620 |
-| t4s-01 (Text4Shell CVE) | 0.92 ± 0.05 | **0.95 ± 0.00** | -0.04 | 6,354 | 6,881 |
-| neg-01 (negative control) | 0.48 ± 0.07 | **0.57 ± 0.00** | -0.09 | 3,112 | 2,423 |
-| oom-01 (JVM OOM) | 0.55 ± 0.03 | **0.67 ± 0.00** | -0.12 | 7,368 | 2,519 |
-| dep-01 (bad deploy) | **0.94 ± 0.08** | 0.67 ± 0.00 | +0.27 | 4,807 | 3,055 |
-| cert-01 (cert expiry) | **0.77 ± 0.15** | 0.69 ± 0.03 | +0.08 | 4,923 | 2,998 |
-| cfg-01 (schema migration) | 0.67 ± 0.00 | **0.77 ± 0.15** | -0.11 | 5,903 | 3,386 |
-| struts-01 (Struts CVE) | **0.95 ± 0.00** | 0.88 ± 0.00 | +0.07 | 5,576 | 3,137 |
-| **Aggregate** | **0.769 ± 0.187** | 0.746 ± 0.128 | **+0.023** | 6,543 | 4,502 |
-
-**Findings:**
-
-- **Quality: swarm leads aggregate** — Δ = +0.023, swarm wins 4/8 clearly, ties on t4s-01. Swarm is better when evidence sources align (CVE incidents + structured deploys); baseline better on resource exhaustion and ambiguous incidents.
-- **Token cost: swarm uses +45% more tokens** — 6,543 vs 4,502 avg.
-- **High variance on some scenarios**: cert-01 swarm std=0.15 signals the Critic occasionally produces low-confidence output when log and commit evidence partially conflict.
-
-
-```bash
-# Reproduce results:
-uv run python benchmarks/ablation_runner.py \
-  --ids ls-01 t4s-01 neg-01 oom-01 dep-01 cert-01 cfg-01 struts-01 \
-  --repeats 2 --output benchmarks/results/ablation_v3_n2.json
-```
-
-### Scenario families (50 total)
-
-| Family | IDs | Source | Incident type |
-|---|---|---|---|
-| Log4Shell | ls-01…ls-12 | CVE-2021-44228 (real Apache commits) | JNDI RCE via HTTP header |
-| Text4Shell | t4s-01…t4s-06 | CVE-2022-42889 (real Apache commits) | Script lookup RCE |
-| Struts RCE | struts-01/02 | **GHSA-j77q-2qqg-6989** (SHA fetched from GHSA API) | OGNL injection, Equifax 2017 |
-| Spring4Shell | spring4s-01…03 | **GHSA-36p3-wjmg-h94x** (SHA fetched from GHSA API) | DataBinder classLoader RCE |
-| Cert expiry | cert-01/02 | Synthetic | TLS cert expired, auth-svc |
-| Network partition | net-01/02 | Synthetic (Meta BGP-inspired) | Redis split-brain |
-| Third-party API | ext-01/02 | Synthetic | Stripe degradation |
-| Deadlock | race-01/02 | Synthetic | MySQL lock-order inversion |
-| Schema migration | cfg-01/02 | **CircleCI 2021** | Type mismatch breaks distributor |
-| BGP withdrawal | bgp-01/02 | **Facebook/Meta 2021** | Global DNS unreachable |
-| WAF regex | regex-01/02 | **Cloudflare 2019** | Catastrophic backtracking |
-| Negative | neg-01…03 | Synthetic | No incident — must report inconclusive |
-| OOM | oom-01/02 | Synthetic | JVM heap exhaustion |
-| Bad deploy | dep-01/02 | Synthetic | DB_HOST config drift |
-| Deadlock (DB) | dbl-01/02 | Synthetic | HikariCP pool exhaustion |
-| Dependency fail | svc-01/02 | Synthetic | auth-svc 503 cascade |
-| Rate limit | rlt-01/02 | Synthetic | Stripe 429 retry storm |
-
-### Evaluation Metrics (7 dimensions)
-
-| Metric | What it measures | Type |
+| | Swarm | Baseline |
 |---|---|---|
-| **RCA accuracy** | Root cause correctly identified | OpenAI gpt-4o-mini judge |
-| **Evidence quality** | Correct commit SHA + logs + tickets cited | Deterministic |
-| **Actionability** | Actions reference expected ticket IDs | Deterministic |
-| **Reliability** | Completed + correct inconclusive flag | Deterministic |
-| **PII compliance** | No emails or usernames in output | Deterministic |
-| **Citation integrity** | SHA + logger keyword + log entry | Deterministic |
-| **Reasoning quality** | Causal chain logically sound | OpenAI gpt-4o-mini judge |
+| Aggregate score | **0.769 ± 0.187** | 0.746 ± 0.128 |
+| Avg tokens | 6,543 | 4,502 |
 
-### Fetch real CVE scenarios from GitHub Advisory Database
+Swarm wins on multi-source CVE/deploy incidents; baseline wins on resource/ambiguous ones. Swarm costs +45% more tokens — a quality-vs-cost tradeoff, not a saving.
+
+Full per-scenario tables, the 50-scenario catalog, the 7 evaluation dimensions, and reproduce/fetch commands: **[docs/BENCHMARKS.md](docs/BENCHMARKS.md)**.
 
 ```bash
-# Fetch Struts CVE-2017-5638 oracle (no GitHub token required)
-uv run python data/loaders/ghsa_fetcher.py --ghsa GHSA-j77q-2qqg-6989 --name struts
-
-# Fetch Spring4Shell CVE-2022-22965
-uv run python data/loaders/ghsa_fetcher.py --cve CVE-2022-22965 --name spring4shell
-
-# Fetch any CVE
-uv run python data/loaders/ghsa_fetcher.py --cve CVE-2021-44228 --name log4shell_verify
+uv run python -m pytest tests/        # test suite
+uv run python benchmarks/runner.py    # all 50 scenarios
 ```
-
-### Running benchmarks
-
-```bash
-# All 50 scenarios
-uv run python benchmarks/runner.py
-
-# Specific IDs
-uv run python benchmarks/runner.py --ids oom-01 dep-01 struts-01 spring4s-01
-
-# Ablation (swarm vs baseline)
-uv run python benchmarks/ablation_runner.py --ids ls-01 t4s-01 neg-01 oom-01 dep-01 --repeats 4
-
-# Tests (70 passing)
-uv run python -m pytest tests/
-```
-
----
-
-## Architecture decisions
-
-**Why smart speaker selection?**
-`round_robin` lets Critic fire before specialists complete — it echoes sentinel tokens instead of synthesising. `_smart_select_speaker()` blocks Critic until `DEVOPS_DONE`, `SWE_DONE`, `PM_DONE` all appear.
-
-**Why adaptive routing?**
-v3 ablation: swarm Δ = +0.11 on Log4Shell, -0.12 on OOM, +0.27 on BadDeploy. `swarm/routing.py` fits a `LogisticRegression` on the N=8 ablation outcomes (LOO-CV = 88% on v2 labels). Key finding: routing on service+severity alone is underdetermined for 4/8 scenario types — dep/cert/cfg/struts share the same feature signature but different outcomes. Routing accuracy improves when incident context text (first alert body line) is passed via the `context` parameter.

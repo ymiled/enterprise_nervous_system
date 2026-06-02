@@ -44,6 +44,36 @@ from schemas.postmortem import PostMortem
 MCP_DIR = Path(__file__).parent.parent / "mcp_servers"
 
 
+def _install_benign_anyio_filter() -> None:
+    """Silence the benign anyio 'cancel scope in a different task' RuntimeError.
+
+    The mcp stdio client tears its anyio task group down in a different task than
+    it was entered in (worsened by asyncio.gather over three sessions). This fires
+    only during teardown AFTER the chat result is captured, so it is safe to drop.
+    Installs a loop exception handler that chains to the previous one for anything
+    else. Idempotent — safe to call on every run.
+    """
+    try:
+        loop = asyncio.get_running_loop()
+    except RuntimeError:
+        return
+    if getattr(loop, "_ens_anyio_filter", False):
+        return
+    previous = loop.get_exception_handler()
+
+    def handler(loop_, context):
+        exc = context.get("exception")
+        if isinstance(exc, RuntimeError) and "cancel scope" in str(exc):
+            return  # benign MCP stdio teardown artifact
+        if previous is not None:
+            previous(loop_, context)
+        else:
+            loop_.default_exception_handler(context)
+
+    loop.set_exception_handler(handler)
+    loop._ens_anyio_filter = True  # type: ignore[attr-defined]
+
+
 # Orchestrator
 
 def _compute_usage(messages: list[dict]) -> dict:
@@ -161,6 +191,7 @@ async def run_incident_analysis(
                         seed data files, e.g. {"LOGS_SEED_FILE": "/path/to/oom_logs.json"}
     """
     jira_project = jira_project or DEFAULT_JIRA_PROJECT
+    _install_benign_anyio_filter()
     incident_brief = (
         f"INCIDENT REPORT\n"
         f"{'=' * 40}\n"
@@ -243,7 +274,9 @@ async def run_incident_analysis(
         groupchat = GroupChat(
             agents=[coordinator, devops_agent, swe_agent, pm_agent, critic_agent],
             messages=[],
-            max_round=30,
+            # Live mode produces large real diffs and many tool calls; 30 rounds
+            # can run out before the Critic synthesises. 45 gives headroom.
+            max_round=45,
             speaker_selection_method=_smart_select_speaker,
         )
 
@@ -260,21 +293,32 @@ async def run_incident_analysis(
         )
 
         # Self-correction: if Critic's JSON is missing commits or logs, ask it to fix.
-        pm = _extract_postmortem(groupchat.messages)
-        if pm is not None and not pm.inconclusive and (not pm.evidence.commits or not pm.evidence.logs):
+        # Keep the first valid postmortem as a floor — self-correction must never
+        # make the result worse. On live data a fix commit may genuinely be
+        # unreachable (e.g. GitHub GraphQL history does not page back far enough),
+        # in which case the correction chat can run to max rounds without emitting
+        # new JSON; we then fall back to the already-valid first answer.
+        pm_first = _extract_postmortem(groupchat.messages)
+        if pm_first is not None and not pm_first.inconclusive and (
+            not pm_first.evidence.commits or not pm_first.evidence.logs
+        ):
             await devops_agent.a_initiate_chat(
                 chat_manager,
                 message=CRITIC_SELF_CORRECT_PROMPT.format(
-                    missing="evidence.commits" if not pm.evidence.commits else "evidence.logs"
+                    missing="evidence.commits" if not pm_first.evidence.commits else "evidence.logs"
                 ),
                 silent=False,
                 clear_history=False,
             )
+            pm_second = _extract_postmortem(groupchat.messages)
+            pm = pm_second if pm_second is not None else pm_first
+        else:
+            pm = pm_first
 
         # Last statement inside the session block: the chat is done, so capture
         # the answer NOW. If AsyncExitStack teardown then raises the anyio
         # "cancel scope" RuntimeError, `result` is already populated.
-        result = _extract_postmortem(groupchat.messages), _compute_usage(groupchat.messages)
+        result = pm, _compute_usage(groupchat.messages)
     except RuntimeError as exc:
         # anyio tears MCP stdio sessions down in a task other than the one that
         # opened them (worsened by asyncio.gather). This fires AFTER the chat
@@ -319,13 +363,28 @@ def _extract_postmortem(messages: list[dict]) -> PostMortem | None:
         end = content.find("```", start)
         raw = content[start:end].strip()
 
+        data = None
         try:
-            data = json.loads(raw)
-            return PostMortem(**data)
+            # raw_decode stops at end of first valid JSON object, ignoring
+            # any separator lines / agent prose the Critic appended after the block.
+            data, _ = json.JSONDecoder().raw_decode(raw)
         except json.JSONDecodeError as exc:
-            print(f"[WARN] Critic JSON is malformed: {exc}", file=sys.stderr)
-            print(f"[DEBUG] Raw excerpt: {raw[:300]}", file=sys.stderr)
-            return None
+            # LLMs sometimes paste raw log/diff content with unescaped quotes or
+            # control chars into a field, breaking JSON mid-string. json_repair
+            # fixes the common cases (stray quotes, trailing commas, control chars)
+            # so a single formatting slip does not discard an otherwise-good answer.
+            print(f"[WARN] Critic JSON malformed ({exc}); attempting repair.", file=sys.stderr)
+            try:
+                from json_repair import repair_json
+                data = json.loads(repair_json(raw))
+                print("[INFO] json_repair recovered the Critic JSON.", file=sys.stderr)
+            except Exception as exc2:
+                print(f"[WARN] Repair failed: {exc2}", file=sys.stderr)
+                print(f"[DEBUG] Raw excerpt: {raw[:300]}", file=sys.stderr)
+                return None
+
+        try:
+            return PostMortem(**data)
         except Exception as exc:
             print(f"[WARN] PostMortem validation failed: {exc}", file=sys.stderr)
             print(f"[DEBUG] Raw JSON:\n{raw}", file=sys.stderr)

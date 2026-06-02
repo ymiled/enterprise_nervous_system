@@ -3,7 +3,8 @@ FastAPI server for Enterprise Nervous System.
 
 Endpoints:
   GET  /health         — liveness check
-  POST /analyze        — trigger RCA, return PostMortem JSON (requires X-API-Key if API_KEY set)
+  POST /analyze        — enqueue RCA job, returns {job_id, status} immediately (202)
+  GET  /analyze/{job_id} — poll job status; result included when status == "done"
   POST /slack/analyze  — Slack slash command webhook (async, posts back to response_url)
 
 Run:
@@ -21,16 +22,27 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import AsyncIterator, Literal
+from uuid import uuid4
 
 import httpx
-from fastapi import FastAPI, HTTPException, Request, Security
+from fastapi import BackgroundTasks, FastAPI, HTTPException, Request, Security
 from fastapi.security.api_key import APIKeyHeader
 from pydantic import BaseModel
 
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from config.settings import API_KEY, PAGERDUTY_WEBHOOK_SECRET, SLACK_SIGNING_SECRET, SLACK_WEBHOOK_URL
-from swarm.orchestrator import _should_use_swarm, run_incident_analysis
+from api.jobstore import make_job_store
+from api.queue import make_queue
+from api.tasks import execute_rca, run_rca_job
+from config.settings import (
+    API_KEY,
+    JOB_TTL_SECONDS,
+    PAGERDUTY_WEBHOOK_SECRET,
+    REDIS_URL,
+    SLACK_SIGNING_SECRET,
+    SLACK_WEBHOOK_URL,
+)
+from swarm.orchestrator import run_incident_analysis
 
 log = logging.getLogger("ens.api")
 
@@ -48,7 +60,7 @@ async def lifespan(_: FastAPI) -> AsyncIterator[None]:
 
 app = FastAPI(title="Enterprise Nervous System", version="0.1.0", lifespan=lifespan)
 
-_SWARM_TIMEOUT = 120.0  # seconds before a stuck swarm is killed
+_SWARM_TIMEOUT = 300.0  # seconds before a stuck swarm is killed (all-live gpt-4o needs headroom)
 
 _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
@@ -68,14 +80,23 @@ async def _require_api_key(key: str | None = Security(_api_key_header)) -> None:
 async def health():
     return {
         "status": "ok",
-        "model": "llama-3.3-70b-versatile",
+        "model": "gpt-4o",
         "swarm_timeout_s": _SWARM_TIMEOUT,
         "auth_enabled": bool(API_KEY),
         "version": "0.1.0",
     }
 
 
-# POST /analyze
+# POST /analyze  (async job queue)
+# JobStore holds job lifecycle: Redis-backed when REDIS_URL set, else in-memory+TTL.
+# Execution transport:
+#   - rq queue + separate worker when Redis+rq available (crash-durable: an API
+#     crash cannot orphan an in-flight job — the worker process owns execution).
+#   - in-process BackgroundTasks otherwise (single-replica dev mode).
+
+_jobs = make_job_store(REDIS_URL, JOB_TTL_SECONDS)
+_queue = make_queue(REDIS_URL)
+
 
 class AnalyzeRequest(BaseModel):
     service: str
@@ -85,38 +106,32 @@ class AnalyzeRequest(BaseModel):
     mode: Literal["auto", "swarm", "single"] = "auto"
 
 
-@app.post("/analyze")
-async def analyze(req: AnalyzeRequest, _: None = Security(_require_api_key)):
-    use_swarm = (
-        req.mode == "swarm"
-        or (req.mode == "auto" and _should_use_swarm(req.service, req.incident_time, req.severity))
-    )
-    log.info("RCA mode: %s (requested=%s) for %s", "swarm" if use_swarm else "single", req.mode, req.service)
+@app.post("/analyze", status_code=202)
+async def analyze(
+    req: AnalyzeRequest,
+    background_tasks: BackgroundTasks,
+    _: None = Security(_require_api_key),
+):
+    job_id = str(uuid4())
+    await _jobs.set(job_id, {"status": "queued"})
+    payload = req.model_dump()
 
-    try:
-        pm, usage = await asyncio.wait_for(
-            run_incident_analysis(
-                service=req.service,
-                incident_time=req.incident_time,
-                severity=req.severity,
-                jira_project=req.jira_project,
-            ),
-            timeout=_SWARM_TIMEOUT,
-        )
-    except asyncio.TimeoutError:
-        log.error("Swarm timed out after %ss for %s", _SWARM_TIMEOUT, req.service)
-        raise HTTPException(
-            status_code=504,
-            detail={"error": f"Swarm did not complete within {_SWARM_TIMEOUT}s timeout"},
-        )
+    if _queue is not None:
+        _queue.enqueue(run_rca_job, job_id, payload, job_id=job_id)
+        transport = "rq"
+    else:
+        background_tasks.add_task(execute_rca, job_id, payload, _jobs)
+        transport = "background"
 
-    if pm is None:
-        raise HTTPException(status_code=500, detail={"error": "Swarm did not produce a valid PostMortem"})
+    return {"job_id": job_id, "status": "queued", "transport": transport}
 
-    result = pm.model_dump()
-    result["_usage"] = usage
-    result["_mode"] = "swarm" if use_swarm else "single"
-    return result
+
+@app.get("/analyze/{job_id}")
+async def get_job(job_id: str, _: None = Security(_require_api_key)):
+    job = await _jobs.get(job_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail={"error": f"Job {job_id!r} not found"})
+    return job
 
 
 # POST /slack/analyze

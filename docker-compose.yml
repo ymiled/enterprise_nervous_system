@@ -5,15 +5,38 @@ services:
       - "8000:8000"
     env_file: .env
     environment:
-      - LOGS_MODE=mock
-      - GITHUB_MODE=mock
-      - JIRA_MODE=mock
+      # Live backends. GITHUB_MODE=live needs GITHUB_TOKEN in .env; JIRA live uses
+      # the public Apache instance; LOGS live needs the ES index populated (run
+      # es_ingestor against http://localhost:9200 once after `up`).
+      - LOGS_MODE=live
+      - GITHUB_MODE=live
+      - JIRA_MODE=live
+      - ES_URL=http://elasticsearch:9200
+      - REDIS_URL=redis://redis:6379/0
     healthcheck:
       test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
       interval: 30s
       timeout: 10s
       retries: 3
     depends_on:
+      elasticsearch:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  worker:
+    build: .
+    command: ["uv", "run", "python", "-m", "api.worker"]
+    env_file: .env
+    environment:
+      - LOGS_MODE=live
+      - GITHUB_MODE=live
+      - JIRA_MODE=live
+      - ES_URL=http://elasticsearch:9200
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      redis:
+        condition: service_healthy
       elasticsearch:
         condition: service_healthy
 
@@ -33,5 +56,18 @@ services:
       timeout: 5s
       retries: 10
 
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
 volumes:
   es_data:
+  redis_data:

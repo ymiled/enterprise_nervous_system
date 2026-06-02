@@ -17,22 +17,30 @@ dependencies = [
     "anthropic>=0.104.1",
     "tiktoken>=0.7.0",
     "scikit-learn>=1.5.0",
+    "redis>=5.0.0",
     "pytest-asyncio>=1.4.0",
     "respx>=0.23.1",
+    "rq>=2.9.0",
+    "json-repair>=0.59.10",
 ]
 
 [project.optional-dependencies]
 dev = [
     "pytest>=8.0.0",
     "pytest-asyncio>=0.23.0",
+    "fakeredis>=2.36.0",
 ]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: requires live infra (Redis / Elasticsearch); skipped when unreachable",
+]
 
 [dependency-groups]
 dev = [
     "pytest>=9.0.3",
+    "fakeredis>=2.36.0",
 ]
 

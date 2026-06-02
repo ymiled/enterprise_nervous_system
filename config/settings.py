@@ -34,6 +34,10 @@ JIRA_EMAIL: str = os.getenv("JIRA_EMAIL", "")
 ES_URL: str   = os.getenv("ES_URL",   "http://localhost:9200")
 ES_INDEX: str = os.getenv("ES_INDEX", "ens-logs")
 
+# Job store — Redis-backed when REDIS_URL set, else in-memory with TTL eviction
+REDIS_URL: str = os.getenv("REDIS_URL", "")
+JOB_TTL_SECONDS: int = int(os.getenv("JOB_TTL_SECONDS", "3600"))
+
 # Seed data paths — overridable per-scenario via env vars (used by benchmark runner)
 SEEDS_DIR: Path = Path(__file__).parent.parent / "data" / "seeds"
 LOGS_SEED_FILE: Path = Path(os.getenv("LOGS_SEED_FILE", str(SEEDS_DIR / "log4shell_logs.json")))
@@ -45,17 +49,18 @@ DEFAULT_INCIDENT_TIME: str = os.getenv("DEFAULT_INCIDENT_TIME", "2021-12-10T06:1
 DEFAULT_INCIDENT_SEVERITY: str = os.getenv("DEFAULT_INCIDENT_SEVERITY", "P0")
 DEFAULT_JIRA_PROJECT: str = os.getenv("DEFAULT_JIRA_PROJECT", "LOG4J2")
 
-# AG2 LLM config — Groq via OpenAI-compatible endpoint (free tier)
-# api_type "openai" + base_url routes through AG2's well-tested OpenAI client,
-# which supports function/tool calling that the MCP toolkit registration requires.
+# AG2 LLM config — GPT-4o primary, gpt-4o-mini and Groq as fallbacks.
+# AG2 tries each entry in order on RateLimitError / quota errors.
 LLM_CONFIG: dict = {
     "config_list": [
+        {"model": "gpt-4o",      "api_key": OPENAI_API_KEY},
+        {"model": "gpt-4o-mini", "api_key": OPENAI_API_KEY},
         {
             "model": "llama-3.3-70b-versatile",
             "api_key": GROQ_API_KEY,
             "api_type": "openai",
             "base_url": "https://api.groq.com/openai/v1",
-        }
+        },
     ],
     "temperature": 0.0,
     "cache_seed": None,

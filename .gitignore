@@ -48,6 +48,8 @@ tmp/
 # Python version pin (local tooling only)
 .python-version
 
+TECHNICAL_NOTES.md
+
 # Raw datasets (large, download separately)
 data/raw/
 

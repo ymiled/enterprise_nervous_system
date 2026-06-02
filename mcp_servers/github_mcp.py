@@ -5,7 +5,11 @@ Exposes Git/code analysis tools for incident root-cause analysis.
 
 Modes (set GITHUB_MODE in .env):
   mock: uses local seed data (log4shell_commits.json). No API calls. Default.
-  live: queries the GitHub REST API. Requires GITHUB_TOKEN.
+  live: queries the GitHub GraphQL API v4 (api.github.com/graphql). Requires GITHUB_TOKEN.
+        Note: file-level patches are not exposed by GraphQL v4; diff_summary returns
+        aggregate additions/deletions counts instead of per-file patches.
+        Commit search uses history + client-side filtering (GraphQL search type
+        does not index commits).
 
 Run standalone:
     python mcp_servers/github_mcp.py
@@ -29,11 +33,12 @@ from fastmcp import FastMCP
 sys.path.insert(0, str(Path(__file__).parent.parent))
 from config.settings import (
     COMMITS_SEED_FILE,
-    GITHUB_API_URL,
     GITHUB_MODE,
     GITHUB_ORG,
     GITHUB_TOKEN,
 )
+
+_GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
 
 mcp = FastMCP(
     "github-server",
@@ -156,69 +161,162 @@ def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[
     return [r for r, *_ in results[:10]]
 
 
-# Live implementations
+# Live implementations (GitHub GraphQL API v4)
+
+def _split_repo(repo: str) -> tuple[str, str]:
+    """Split 'owner/name' into (owner, name)."""
+    owner, _, name = repo.partition("/")
+    return owner, name
+
+
+def _gql(query: str, variables: dict) -> dict:
+    """POST a GraphQL query to api.github.com/graphql and return data dict."""
+    with httpx.Client(timeout=15) as client:
+        resp = client.post(
+            _GITHUB_GRAPHQL_URL,
+            headers=_github_headers(),
+            json={"query": query, "variables": variables},
+        )
+        resp.raise_for_status()
+    payload = resp.json()
+    if "errors" in payload:
+        raise RuntimeError(f"GitHub GraphQL error: {payload['errors']}")
+    return payload["data"]
+
+
+_RECENT_COMMITS_GQL = """
+query RecentCommits($owner: String!, $name: String!, $since: GitTimestamp!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(first: 30, since: $since) {
+            nodes {
+              oid
+              committedDate
+              message
+              changedFilesIfAvailable
+              associatedPullRequests(first: 1) {
+                nodes { number title }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
+_COMMIT_DETAIL_GQL = """
+query CommitDetail($owner: String!, $name: String!, $oid: String!) {
+  repository(owner: $owner, name: $name) {
+    object(expression: $oid) {
+      ... on Commit {
+        oid
+        committedDate
+        message
+        additions
+        deletions
+        changedFilesIfAvailable
+        associatedPullRequests(first: 1) {
+          nodes { number title state }
+        }
+      }
+    }
+  }
+}
+"""
+
+# GitHub GraphQL v4 SearchResultItem union (Issue/PR/Repo/User/Discussion) does not
+# include Commit. Fetch recent history and filter client-side instead.
+_SEARCH_HISTORY_GQL = """
+query SearchHistory($owner: String!, $name: String!, $since: GitTimestamp!) {
+  repository(owner: $owner, name: $name) {
+    defaultBranchRef {
+      target {
+        ... on Commit {
+          history(first: 100, since: $since) {
+            nodes {
+              oid
+              committedDate
+              message
+              associatedPullRequests(first: 1) {
+                nodes { number title }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
+"""
+
 
 def _live_recent_commits(repo: str, hours_back: int) -> list[dict[str, Any]]:
+    owner, name = _split_repo(repo)
     since = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).isoformat()
-    url = f"{GITHUB_API_URL}/repos/{repo}/commits"
-    with httpx.Client(timeout=15) as client:
-        resp = client.get(url, headers=_github_headers(), params={"since": since, "per_page": 30})
-        resp.raise_for_status()
-    results = []
-    for item in resp.json():
-        c = item.get("commit", {})
-        results.append({
-            "sha": item["sha"],
-            "short_sha": item["sha"][:8],
+    data = _gql(_RECENT_COMMITS_GQL, {"owner": owner, "name": name, "since": since})
+    nodes = data["repository"]["defaultBranchRef"]["target"]["history"]["nodes"]
+    return [
+        {
+            "sha": n["oid"],
+            "short_sha": n["oid"][:8],
             "repo": repo,
-            "timestamp": c.get("author", {}).get("date", ""),
-            "message": c.get("message", "").split("\n")[0],
-            "author_team": "unknown",  # GitHub API returns username; we omit for PII
-        })
-    return results
+            "timestamp": n["committedDate"],
+            "message": n["message"].split("\n")[0],
+            "files_changed": [],  # count only via GraphQL; call get_commit_diff for list
+            "author_team": "unknown",
+        }
+        for n in nodes
+    ]
 
 
 def _live_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
-    url = f"{GITHUB_API_URL}/repos/{repo}/commits/{commit_sha}"
-    with httpx.Client(timeout=15) as client:
-        resp = client.get(url, headers=_github_headers())
-        resp.raise_for_status()
-    data = resp.json()
-    c = data.get("commit", {})
-    files = data.get("files", [])
+    owner, name = _split_repo(repo)
+    data = _gql(_COMMIT_DETAIL_GQL, {"owner": owner, "name": name, "oid": commit_sha})
+    obj = data["repository"]["object"]
+    if obj is None:
+        return {"error": f"Commit {commit_sha!r} not found in {repo!r}"}
+    pr_nodes = obj.get("associatedPullRequests", {}).get("nodes", [])
+    pr = pr_nodes[0] if pr_nodes else {}
     return {
-        "sha": data["sha"],
-        "short_sha": data["sha"][:8],
+        "sha": obj["oid"],
+        "short_sha": obj["oid"][:8],
         "repo": repo,
-        "timestamp": c.get("author", {}).get("date", ""),
-        "message": c.get("message", "").split("\n")[0],
-        "files_changed": [f["filename"] for f in files],
-        "diff_summary": {f["filename"]: f.get("patch", "")[:500] for f in files},
+        "timestamp": obj["committedDate"],
+        "message": obj["message"].split("\n")[0],
+        "files_changed": [],  # GraphQL v4 exposes count only; per-file patches require REST
+        "diff_summary": {
+            "additions": obj.get("additions", 0),
+            "deletions": obj.get("deletions", 0),
+            "changed_files_count": obj.get("changedFilesIfAvailable"),
+        },
+        "pr_number": pr.get("number"),
+        "pr_title": pr.get("title"),
+        "ci_status": None,
     }
 
 
 def _live_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[str, Any]]:
-    # GitHub search API — requires auth for higher rate limits
+    owner, name = _split_repo(repo)
     since = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).isoformat()
-    url = f"{GITHUB_API_URL}/search/commits"
-    query = f"repo:{repo} {keyword} committer-date:>={since[:10]}"
-    with httpx.Client(timeout=15) as client:
-        resp = client.get(
-            url, headers=_github_headers(),
-            params={"q": query, "per_page": 20, "sort": "committer-date"},
-        )
-        resp.raise_for_status()
-    results = []
-    for item in resp.json().get("items", []):
-        c = item.get("commit", {})
-        results.append({
-            "sha": item["sha"],
-            "short_sha": item["sha"][:8],
+    data = _gql(_SEARCH_HISTORY_GQL, {"owner": owner, "name": name, "since": since})
+    nodes = data["repository"]["defaultBranchRef"]["target"]["history"]["nodes"]
+    kw = keyword.lower()
+    results = [
+        {
+            "sha": n["oid"],
+            "short_sha": n["oid"][:8],
             "repo": repo,
-            "timestamp": c.get("author", {}).get("date", ""),
-            "message": c.get("message", "").split("\n")[0],
-        })
-    return results
+            "timestamp": n["committedDate"],
+            "message": n["message"].split("\n")[0],
+        }
+        for n in nodes
+        if kw in n["message"].lower()
+    ]
+    return results[:20]
 
 
 # Tools

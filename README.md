@@ -31,7 +31,7 @@ An autonomous root-cause analysis system that queries GitHub, Jira, and applicat
     │(logs MCP)│  └─────┬──────┘  │  (jira MCP)       │
     └────┬─────┘        │         └────┬──────────────┘
   DEVOPS_DONE      SWE_DONE        PM_DONE
-         └──────────────┼─────────────┘
+         └──────────────┼──────────────┘
                         │
                         │  (smart speaker selection blocks
                         │   Critic until all 3 sentinels present)
@@ -145,7 +145,7 @@ Two runs document how judge quality changes findings. Both use OpenAI gpt-4o-min
 **Findings:**
 
 - **Quality: swarm leads aggregate** — Δ = +0.023, swarm wins 4/8 clearly, ties on t4s-01. Swarm is better when evidence sources align (CVE incidents + structured deploys); baseline better on resource exhaustion and ambiguous incidents.
-- **Token cost: swarm uses +45% more tokens** — 6,543 vs 4,502 avg. The previous "44% savings" claim was a measurement error: `total_chars // 4` severely undercounts swarm output (which includes code diffs and log entries — content with high token density per character). Fixed with `tiktoken` cl100k_base.
+- **Token cost: swarm uses +45% more tokens** — 6,543 vs 4,502 avg.
 - **High variance on some scenarios**: cert-01 swarm std=0.15 signals the Critic occasionally produces low-confidence output when log and commit evidence partially conflict.
 
 

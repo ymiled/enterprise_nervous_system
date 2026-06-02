@@ -5,11 +5,15 @@ Exposes Git/code analysis tools for incident root-cause analysis.
 
 Modes (set GITHUB_MODE in .env):
   mock: uses local seed data (log4shell_commits.json). No API calls. Default.
-  live: queries the GitHub GraphQL API v4 (api.github.com/graphql). Requires GITHUB_TOKEN.
-        Note: file-level patches are not exposed by GraphQL v4; diff_summary returns
-        aggregate additions/deletions counts instead of per-file patches.
-        Commit search uses history + client-side filtering (GraphQL search type
-        does not index commits).
+  live: queries GitHub in live mode. Requires GITHUB_TOKEN. Hybrid by design —
+        each operation uses whichever API does it best:
+          - get_recent_commits / get_commits_for_file: GraphQL v4 (history, with PR
+            linkage via associatedPullRequests in one query).
+          - get_commit_diff: GraphQL for metadata + PR, one REST call for patches
+            (GraphQL v4 does not expose raw patches).
+          - search_commits_by_keyword: REST /search/commits (GraphQL v4 cannot
+            search commits server-side; REST is full-text indexed and reaches
+            historical fixes regardless of repo activity).
 
 Run standalone:
     python mcp_servers/github_mcp.py
@@ -18,6 +22,7 @@ Tools exposed:
     - get_recent_commits(repo, hours_back)
     - get_commit_diff(commit_sha, repo)
     - search_commits_by_keyword(repo, keyword, hours_back)
+    - get_commits_for_file(repo, file_path, hours_back)
 """
 from __future__ import annotations
 
@@ -39,6 +44,7 @@ from config.settings import (
 )
 
 _GITHUB_GRAPHQL_URL = "https://api.github.com/graphql"
+_GITHUB_REST_URL = "https://api.github.com"
 
 mcp = FastMCP(
     "github-server",
@@ -161,6 +167,17 @@ def _mock_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[
     return [r for r, *_ in results[:10]]
 
 
+def _mock_commits_for_path(repo: str, file_path: str, hours_back: int) -> list[dict[str, Any]]:
+    """Mock of path-scoped history: seed commits whose files_changed include the file."""
+    commits = _load_seed_commits()
+    base = file_path.split("/")[-1].lower()
+    results = [
+        _slim(_scrub_author(c)) for c in commits
+        if any(base in f.lower() for f in c.get("files_changed", []))
+    ]
+    return sorted(results, key=lambda c: c["timestamp"], reverse=True)[:20]
+
+
 # Live implementations (GitHub GraphQL API v4)
 
 def _split_repo(repo: str) -> tuple[str, str]:
@@ -182,6 +199,18 @@ def _gql(query: str, variables: dict) -> dict:
     if "errors" in payload:
         raise RuntimeError(f"GitHub GraphQL error: {payload['errors']}")
     return payload["data"]
+
+
+def _rest_get(url: str, params: dict | None = None) -> dict:
+    """GET a GitHub REST endpoint and return parsed JSON.
+
+    REST is used where GraphQL v4 cannot help: full-text commit search
+    (/search/commits) and raw file patches (/commits/{sha}).
+    """
+    with httpx.Client(timeout=15) as client:
+        resp = client.get(url, headers=_github_headers(), params=params or {})
+        resp.raise_for_status()
+    return resp.json()
 
 
 _RECENT_COMMITS_GQL = """
@@ -228,15 +257,17 @@ query CommitDetail($owner: String!, $name: String!, $oid: String!) {
 }
 """
 
-# GitHub GraphQL v4 SearchResultItem union (Issue/PR/Repo/User/Discussion) does not
-# include Commit. Fetch recent history and filter client-side instead.
-_SEARCH_HISTORY_GQL = """
-query SearchHistory($owner: String!, $name: String!, $since: GitTimestamp!) {
+# Fix 2 — path-scoped history. When the logs implicate a file, walking that file's
+# own history reaches back to historical fixes efficiently (few commits touch one
+# file), and keeps PR linkage in the same query. This is where GraphQL's object
+# graph genuinely beats REST.
+_PATH_HISTORY_GQL = """
+query PathHistory($owner: String!, $name: String!, $path: String!) {
   repository(owner: $owner, name: $name) {
     defaultBranchRef {
       target {
         ... on Commit {
-          history(first: 100, since: $since) {
+          history(first: 20, path: $path) {
             nodes {
               oid
               committedDate
@@ -273,6 +304,25 @@ def _live_recent_commits(repo: str, hours_back: int) -> list[dict[str, Any]]:
     ]
 
 
+# Cap the live diff payload so one large commit cannot flood the agent
+# conversation (which exhausts the GroupChat round budget before synthesis).
+_MAX_DIFF_FILES = 5
+
+
+def _rest_commit_files(commit_sha: str, repo: str) -> tuple[list[str], dict[str, str]]:
+    """Fetch per-file names and patches via REST — GraphQL v4 does not expose raw patches.
+
+    Returns all changed file names but only the first _MAX_DIFF_FILES patches, to
+    bound the payload size for the agent context.
+    """
+    data = _rest_get(f"{_GITHUB_REST_URL}/repos/{repo}/commits/{commit_sha}")
+    files = data.get("files", [])
+    return (
+        [f["filename"] for f in files],
+        {f["filename"]: f.get("patch", "")[:500] for f in files[:_MAX_DIFF_FILES]},
+    )
+
+
 def _live_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
     owner, name = _split_repo(repo)
     data = _gql(_COMMIT_DETAIL_GQL, {"owner": owner, "name": name, "oid": commit_sha})
@@ -281,18 +331,15 @@ def _live_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
         return {"error": f"Commit {commit_sha!r} not found in {repo!r}"}
     pr_nodes = obj.get("associatedPullRequests", {}).get("nodes", [])
     pr = pr_nodes[0] if pr_nodes else {}
+    files_changed, diff_summary = _rest_commit_files(commit_sha, repo)
     return {
         "sha": obj["oid"],
         "short_sha": obj["oid"][:8],
         "repo": repo,
         "timestamp": obj["committedDate"],
         "message": obj["message"].split("\n")[0],
-        "files_changed": [],  # GraphQL v4 exposes count only; per-file patches require REST
-        "diff_summary": {
-            "additions": obj.get("additions", 0),
-            "deletions": obj.get("deletions", 0),
-            "changed_files_count": obj.get("changedFilesIfAvailable"),
-        },
+        "files_changed": files_changed,
+        "diff_summary": diff_summary,
         "pr_number": pr.get("number"),
         "pr_title": pr.get("title"),
         "ci_status": None,
@@ -300,23 +347,60 @@ def _live_commit_diff(commit_sha: str, repo: str) -> dict[str, Any]:
 
 
 def _live_search_commits(repo: str, keyword: str, hours_back: int) -> list[dict[str, Any]]:
+    """Fix 1 — full-text commit search via REST /search/commits.
+
+    GraphQL v4 cannot search commit messages server-side (its SearchResultItem union
+    excludes commits), and history(first:N) only returns the newest commits — so on a
+    busy repo it never reaches a historical fix. REST /search/commits IS server-side
+    indexed, so it finds the fix commit by keyword regardless of repo activity.
+
+    hours_back is intentionally NOT applied as a now-relative date filter: incidents
+    are often analysed long after they happened, so a now-anchored window would
+    exclude the very fix we are searching for. The keyword + recency sort suffices.
+    """
+    query = f"repo:{repo} {keyword}"
+    data = _rest_get(
+        f"{_GITHUB_REST_URL}/search/commits",
+        {"q": query, "per_page": 20, "sort": "committer-date", "order": "desc"},
+    )
+    results = []
+    for item in data.get("items", []):
+        c = item.get("commit", {})
+        ts = c.get("committer", {}).get("date") or c.get("author", {}).get("date", "")
+        results.append({
+            "sha": item["sha"],
+            "short_sha": item["sha"][:8],
+            "repo": repo,
+            "timestamp": ts,
+            "message": c.get("message", "").split("\n")[0],
+        })
+    return results
+
+
+def _live_commits_for_path(repo: str, file_path: str, hours_back: int) -> list[dict[str, Any]]:
+    """Fix 2 — commits that touched a specific file, newest first, with PR linkage.
+
+    Walks the file's own history via GraphQL history(path:), which reaches back to
+    historical changes efficiently because few commits touch one file.
+    """
     owner, name = _split_repo(repo)
-    since = (datetime.now(timezone.utc) - timedelta(hours=hours_back)).isoformat()
-    data = _gql(_SEARCH_HISTORY_GQL, {"owner": owner, "name": name, "since": since})
-    nodes = data["repository"]["defaultBranchRef"]["target"]["history"]["nodes"]
-    kw = keyword.lower()
-    results = [
-        {
+    data = _gql(_PATH_HISTORY_GQL, {"owner": owner, "name": name, "path": file_path})
+    target = data["repository"]["defaultBranchRef"]["target"]
+    nodes = target["history"]["nodes"] if target else []
+    results = []
+    for n in nodes:
+        pr_nodes = n.get("associatedPullRequests", {}).get("nodes", [])
+        pr = pr_nodes[0] if pr_nodes else {}
+        results.append({
             "sha": n["oid"],
             "short_sha": n["oid"][:8],
             "repo": repo,
             "timestamp": n["committedDate"],
             "message": n["message"].split("\n")[0],
-        }
-        for n in nodes
-        if kw in n["message"].lower()
-    ]
-    return results[:20]
+            "pr_number": pr.get("number"),
+            "pr_title": pr.get("title"),
+        })
+    return results
 
 
 # Tools
@@ -379,6 +463,33 @@ def search_commits_by_keyword(
     return _mock_search_commits(repo, keyword, hours_back)
 
 
+@mcp.tool()
+def get_commits_for_file(
+    repo: str,
+    file_path: str,
+    hours_back: int = 8760,
+) -> list[dict[str, Any]]:
+    """
+    Return commits that modified a specific file, newest first, with PR linkage.
+
+    Use this when the logs implicate a class or file (e.g. the DevOps agent reports
+    a logger like "...JndiManager"): walking that file's own history reliably finds
+    its change log — including historical fixes that a keyword search over recent
+    commits can miss.
+
+    Args:
+        repo:       Repository in "owner/repo" format.
+        file_path:  Path to the file (e.g. "log4j-core/.../net/JndiManager.java").
+                    In mock mode the file basename is matched against files_changed.
+        hours_back: Advisory lookback window (default 8760 = 1 year).
+
+    Returns:
+        Matching commits (newest first) with sha, message, timestamp, and pr_number/
+        pr_title when the commit is linked to a pull request.
+    """
+    if GITHUB_MODE == "live":
+        return _live_commits_for_path(repo, file_path, hours_back)
+    return _mock_commits_for_path(repo, file_path, hours_back)
 
 
 if __name__ == "__main__":

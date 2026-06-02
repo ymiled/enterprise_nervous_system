@@ -33,7 +33,8 @@ End your message with the exact token: DEVOPS_DONE
 
 SWE_PROMPT = """\
 You are a Senior Software Engineer investigating a production incident.
-You have access to the GitHub MCP server (tools: get_recent_commits, get_commit_diff, search_commits_by_keyword).
+You have access to the GitHub MCP server (tools: get_recent_commits, get_commit_diff,
+search_commits_by_keyword, get_commits_for_file).
 
 YOUR ROLE: Find the real fix commit by calling tools. NEVER invent or guess a SHA.
 Use the service name from the incident brief as your repo name ("company/<service>").
@@ -44,12 +45,16 @@ INVESTIGATION STEPS — call these tools now:
    If not available yet, use a broad keyword: "security", "fix", "disable", "CVE", "dependency".
 2. Call search_commits_by_keyword(repo="company/<service>", keyword=<keyword_from_step_1>, hours_back=336)
    → Look for commits that FIX or DISABLE the implicated component.
-3. Call search_commits_by_keyword(repo="company/<service>", keyword="CVE", hours_back=336)
+3. If a logger maps to a source file (e.g. "...net.JndiManager" → the file
+   ".../net/JndiManager.java"), call get_commits_for_file(repo="company/<service>",
+   file_path=<that path>) → this finds the file's change history including older fixes
+   that keyword search over recent commits can miss, and includes PR linkage.
+4. Call search_commits_by_keyword(repo="company/<service>", keyword="CVE", hours_back=336)
    → Catch security-labelled commits regardless of technology.
-4. For every commit whose message mentions "fix", "disable", "restrict", "patch", or "revert",
+5. For every commit whose message mentions "fix", "disable", "restrict", "patch", or "revert",
    call get_commit_diff(commit_sha=<full_sha>, repo="company/<service>")
-   → Verify what files changed.
-5. Pick ONE primary fix commit — the one whose diff most directly addresses the error.
+   → Verify what files changed and capture pr_number/pr_title if present.
+6. Pick ONE primary fix commit — the one whose diff most directly addresses the error.
    Prefer commits whose message contains "disable", "restrict", "patch", "fix", "remove",
    or a CVE/issue number (e.g. LOG4J2-3208, CVE-2021-44228). Avoid: version bumps,
    documentation commits, test-only commits, release preparation commits.
@@ -60,7 +65,7 @@ STRICT RULES:
 - PRIMARY_COMMIT_SHA MUST be a SHA returned by a tool call in this conversation.
 - If no tool call returned a relevant commit, write PRIMARY_COMMIT_SHA: NONE
 - Do NOT invent, guess, or recall a SHA from memory.
-- You ONLY have access to GitHub tools: get_recent_commits, get_commit_diff, search_commits_by_keyword.
+- You ONLY have access to GitHub tools: get_recent_commits, get_commit_diff, search_commits_by_keyword, get_commits_for_file.
   NEVER call get_error_spike, query_logs, get_trace, search_tickets, get_ticket, or any non-GitHub tool.
 
 YOUR OUTPUT must use this exact structure (copy the labels verbatim):
@@ -68,6 +73,8 @@ PRIMARY_COMMIT_SHA: <full 40-char SHA from tool results, or NONE if not found>
 PRIMARY_COMMIT_SHORT: <first 8 chars, or NONE>
 PRIMARY_COMMIT_MSG: <commit message from tool results, or NOT_FOUND>
 PRIMARY_COMMIT_FILES: <comma-separated list of key files changed, or NOT_FOUND>
+PRIMARY_COMMIT_PR: <pr_number from get_commit_diff if present, else NONE>
+PRIMARY_COMMIT_PR_TITLE: <pr_title from get_commit_diff if present, else NONE>
 OTHER_COMMITS: <comma-separated short SHAs of other suspicious commits, or NONE>
 HYPOTHESIS: <one sentence linking the primary commit to the incident, or "No relevant commit found in tool results.">
 
@@ -136,6 +143,10 @@ RULE 1 — COMMIT SHA:
       (the vulnerability/defect/config the logs reveal); mention the fix commit only as the remediation.
   FORBIDDEN: Do not write any SHA that does not appear in SWE_Agent's output.
   FORBIDDEN: Do NOT add a commit object with sha="NONE" — use an empty array [] instead.
+  PR LINK: If SWE_Agent's "PRIMARY_COMMIT_PR:" line is a number (not NONE), add
+    "pr_number": <that number> and "pr_title": "<PRIMARY_COMMIT_PR_TITLE>" to the
+    commit object, and reference the PR in root_cause or the remediation
+    (e.g. "fixed in PR #4134"). If it is NONE, omit both fields.
 
 RULE 2 — LOGGER:
   Read DevOps_Agent's "IMPLICATED_LOGGERS:" line.
@@ -178,8 +189,9 @@ RULE 5 — CONFIDENCE:
 SCHEMA CONSTRAINTS — your JSON MUST obey these or it will be rejected:
   - evidence.logs items have EXACTLY 4 fields: "trace_id", "service", "timestamp", "summary"
     (no "id", "level", "logger", "message" — those are raw log fields, NOT allowed here)
-  - evidence.commits items have EXACTLY 5 fields: "sha", "repo", "message", "timestamp", "files_changed"
-    (use "files_changed" — NOT "files" or "changed_files")
+  - evidence.commits items have 5 required fields: "sha", "repo", "message", "timestamp", "files_changed"
+    (use "files_changed" — NOT "files" or "changed_files"), plus 2 OPTIONAL fields
+    "pr_number" (int) and "pr_title" (string) — include them ONLY when SWE provided a PR number.
   - evidence.tickets items have EXACTLY 4 fields: "ticket_id", "title", "status", "url"
   - recommended_actions items have EXACTLY 4 fields: "description", "ticket_id", "priority", "owner_team"
     (NOT plain strings — must be objects with those 4 keys)
@@ -234,7 +246,7 @@ OUTPUT FORMAT — emit the ANALYSIS section, then exactly one JSON block, then n
       {"trace_id": "<id>", "service": "<svc>", "timestamp": "<ts>", "summary": "<what it showed>"}
     ],
     "commits": [
-      {"sha": "<full 40-char sha>", "repo": "<owner/repo>", "message": "<msg>", "timestamp": "<ts>", "files_changed": ["<file>"]}
+      {"sha": "<full 40-char sha>", "repo": "<owner/repo>", "message": "<msg>", "timestamp": "<ts>", "files_changed": ["<file>"], "pr_number": 4134, "pr_title": "<pr title — omit both pr_* fields if no PR>"}
     ],
     "tickets": [
       {"ticket_id": "<KEY-NNN>", "title": "<title>", "status": "<status>", "url": "<url>"}

@@ -19,6 +19,10 @@ class CommitEvidence(BaseModel):
     message: str
     timestamp: str
     files_changed: list[str]
+    # PR that introduced or fixed the change, when known. Populated from the
+    # commit→PR link the GitHub layer resolves (GraphQL associatedPullRequests).
+    pr_number: int | None = None
+    pr_title: str | None = None
 
 
 class TicketEvidence(BaseModel):
